@@ -24,7 +24,7 @@
 //
 
 import Foundation
-import secp256k1sui
+import secp256k1
 
 public struct Utilities {
     /// Convert the private key (32 bytes of Data) to compressed (33 bytes) or non-compressed (65 bytes) public key.

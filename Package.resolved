@@ -3,10 +3,10 @@
     {
       "identity" : "anycodable",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/MarcoDotIO/AnyCodable",
+      "location" : "https://github.com/Flight-School/AnyCodable.git",
       "state" : {
         "revision" : "862808b2070cd908cb04f9aafe7de83d35f81b05",
-        "version" : "1.0.0"
+        "version" : "0.6.7"
       }
     },
     {
@@ -68,8 +68,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/auth0/JWTDecode.swift",
       "state" : {
-        "revision" : "36a5ce735a61c4bc119593f43ce2c027b4ca7392",
-        "version" : "3.3.0"
+        "revision" : "58af7278797871e460d79496621b3e5366b865b2",
+        "version" : "3.1.0"
       }
     },
     {
@@ -82,12 +82,21 @@
       }
     },
     {
+      "identity" : "swift-secp256k1",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/21-DOT-DEV/swift-secp256k1",
+      "state" : {
+        "revision" : "48fb20fce4ca3aad89180448a127d5bc16f0e44c",
+        "version" : "0.10.0"
+      }
+    },
+    {
       "identity" : "swiftyjson",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/SwiftyJSON/SwiftyJSON.git",
       "state" : {
-        "revision" : "2b6054efa051565954e1d2b9da831680026cd768",
-        "version" : "4.3.0"
+        "revision" : "af76cf3ef710b6ca5f8c05f3a31307d44a3c5828",
+        "version" : "5.0.2"
       }
     },
     {

@@ -24,7 +24,7 @@
 //
 
 import Foundation
-import secp256k1sui
+import secp256k1
 import Blake2
 
 public struct SECP256K1PublicKey: Equatable, PublicKeyProtocol {
@@ -100,7 +100,7 @@ public struct SECP256K1PublicKey: Equatable, PublicKeyProtocol {
                 if let dataRawPtr = rawUnsafeDataPtr.baseAddress, !rawUnsafeDataPtr.isEmpty {
                     let dataPtr = dataRawPtr.assumingMemoryBound(to: UInt8.self)
                     return withUnsafePointer(to: pubKeyObject) { (pubKeyPtr: UnsafePointer<secp256k1_pubkey>) -> Bool in
-                        return secp256k1sui.secp256k1_ecdsa_verify(ctx, signaturePtr, dataPtr, pubKeyPtr) != 0
+                        return secp256k1_ecdsa_verify(ctx, signaturePtr, dataPtr, pubKeyPtr) != 0
                     }
                 } else {
                     return false
