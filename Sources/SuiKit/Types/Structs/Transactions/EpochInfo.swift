@@ -1,5 +1,5 @@
 //
-//  UInt256.swift
+//  EpochInfo.swift
 //  SuiKit
 //
 //  Copyright (c) 2024-2025 OpenDive
@@ -23,24 +23,9 @@
 //  THE SOFTWARE.
 //
 
-import Foundation
-import UInt256
-
-extension UInt256: @retroactive Decodable {}
-extension UInt256: @retroactive Encodable {}
-extension UInt256 {
-    private enum CodingKeys: String, CodingKey {
-        case parts = "parts"
-    }
-
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let parts = try container.decode(String.self, forKey: .parts)
-        self.init(parts)!
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode("\(self)", forKey: .parts)
-    }
+/// Information about the current epoch
+public struct EpochInfo {
+    public let epoch: UInt64
+    public let epochStartTimestampMs: UInt64
+    public let epochDurationMs: UInt64
 }

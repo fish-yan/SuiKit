@@ -203,8 +203,8 @@ public class ZkLoginAuthenticator {
     ///   - zkLoginSignature: The zkLogin signature
     ///   - userAddress: The user's zkLogin address
     ///   - graphQLClient: Optional GraphQL client for signature verification
-    /// - Returns: A ZkLoginAuthenticator with enhanced capabilities
-    public func createZkLoginSigner(
+    /// - Returns: A zkLoginSigner with enhanced capabilities
+    public func createzkLoginSigner(
         ephemeralKeyPair: Account,
         zkLoginSignature: zkLoginSignature,
         userAddress: String,
@@ -218,11 +218,4 @@ public class ZkLoginAuthenticator {
             graphQLClient: graphQLClient
         )
     }
-}
-
-/// Information about the current epoch
-public struct EpochInfo {
-    public let epoch: UInt64
-    public let epochStartTimestampMs: UInt64
-    public let epochDurationMs: UInt64
 }
