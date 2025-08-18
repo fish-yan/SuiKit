@@ -27,7 +27,7 @@ import Foundation
 import BigInt
 
 /// Manages the zkLogin authentication flow
-public class zkLoginAuthenticator {
+public class ZkLoginAuthenticator {
     private let provider: SuiProvider
 
     public init(provider: SuiProvider) {
@@ -209,8 +209,8 @@ public class zkLoginAuthenticator {
         zkLoginSignature: zkLoginSignature,
         userAddress: String,
         graphQLClient: GraphQLClientProtocol? = nil
-    ) -> zkLoginSigner {
-        return zkLoginSigner(
+    ) -> ZkLoginSigner {
+        return ZkLoginSigner(
             provider: provider,
             ephemeralKeyPair: ephemeralKeyPair,
             zkLoginSignature: zkLoginSignature,
@@ -218,11 +218,4 @@ public class zkLoginAuthenticator {
             graphQLClient: graphQLClient
         )
     }
-}
-
-/// Information about the current epoch
-public struct EpochInfo {
-    public let epoch: UInt64
-    public let epochStartTimestampMs: UInt64
-    public let epochDurationMs: UInt64
 }
