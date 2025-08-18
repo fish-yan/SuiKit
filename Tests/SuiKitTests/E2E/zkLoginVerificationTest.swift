@@ -114,7 +114,7 @@ final class zkLoginVerificationTest: XCTestCase {
         XCTAssertTrue(verificationResult)
 
         // Try with a modified transaction data
-        var modifiedTxBytes = txBytes.bytes
+        var modifiedTxBytes: [UInt8] = txBytes.bytes
         if !modifiedTxBytes.isEmpty {
             modifiedTxBytes[0] = modifiedTxBytes[0] ^ 0xFF // Flip bits to change the data
         }

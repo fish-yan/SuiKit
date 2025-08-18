@@ -132,7 +132,7 @@ final class ZkLoginSignerTests: XCTestCase {
 
     func testVerifyPersonalMessageWithzkLogin() async throws {
         // Test data: base64 encoding of "hello"
-        let messageBytes = "hello".data(using: .utf8)!.bytes
+        let messageBytes: [UInt8] = "hello".data(using: .utf8)!.bytes
 
         // Parse the personal message signature
         let parsedSignature = try zkLoginSigner.parseSignature(personalMessageSignature)
@@ -155,7 +155,7 @@ final class ZkLoginSignerTests: XCTestCase {
         XCTAssertTrue(result)
 
         // Test data: base64 encoding of "hello"
-        let invalidMessageBytes = "hello1".data(using: .utf8)!.bytes
+        let invalidMessageBytes: [UInt8] = "hello1".data(using: .utf8)!.bytes
 
         let failResult = try await signer.verifyPersonalMessage(
             message: invalidMessageBytes,
@@ -194,7 +194,7 @@ final class ZkLoginSignerTests: XCTestCase {
         XCTAssertTrue(result)
 
         // Test with modified transaction data (should fail)
-        var modifiedTxBytes = txBytes.bytes
+        var modifiedTxBytes: [UInt8] = txBytes.bytes
         if !modifiedTxBytes.isEmpty {
             modifiedTxBytes[0] = modifiedTxBytes[0] ^ 0xFF // Flip bits
         }
@@ -253,13 +253,13 @@ final class ZkLoginSignerTests: XCTestCase {
         )
 
         // Test transaction signing
-        let txData = "hello world".data(using: .utf8)!.bytes
+        let txData: [UInt8] = "hello world".data(using: .utf8)!.bytes
         let txSignature = try signer.signTransaction(txData)
         XCTAssertFalse(txSignature.isEmpty)
         XCTAssertTrue(txSignature.starts(with: "BQ")) // Should start with zkLogin flag in base64
 
         // Test personal message signing
-        let messageData = "hello world".data(using: .utf8)!.bytes
+        let messageData: [UInt8] = "hello world".data(using: .utf8)!.bytes
         let messageSignature = try signer.signPersonalMessage(messageData)
         XCTAssertFalse(messageSignature.isEmpty)
         XCTAssertTrue(messageSignature.starts(with: "BQ")) // Should start with zkLogin flag in base64
