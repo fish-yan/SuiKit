@@ -856,48 +856,35 @@ public class TransactionBlock {
                     builder: SerializedTransactionDataBuilder(gasConfig: gasConfig)
                 )
 
-                let maxGasBudget = try await prepareGasBudget(
-                    options,
-                    blockData: [UInt8](blockData.build(overrides: txBlockDataBuilder))
+                let dryRunResult = try await provider.dryRunTransactionBlock(
+                    transactionBlock: [UInt8](blockData.build(overrides: txBlockDataBuilder))
                 )
-                self.setGasBudget(price: maxGasBudget)
-                
-                let gasBudget = try await prepareGasBudget(
-                    options,
-                    blockData: [UInt8](self.blockData.build())
+
+                guard dryRunResult.effects?.status.status != .failure else {
+                    throw SuiError.customError(message: "Failed dry run transaction block with error: \(dryRunResult.effects?.status.error ?? "UNKNOWN_ERROR")")
+                }
+
+                let safeOverhead = Int(TransactionConstants.GAS_SAFE_OVERHEAD) * (
+                    Int(blockData.builder.gasConfig.price ?? "1")!
                 )
-                self.setGasBudget(price: gasBudget)
+
+                let baseComputationCostWithOverhead =
+                    (Int(dryRunResult.effects?.gasUsed.computationCost ?? "0")!) +
+                    safeOverhead
+
+                let gasBudget =
+                    baseComputationCostWithOverhead +
+                    (Int(dryRunResult.effects?.gasUsed.storageCost ?? "0")!) -
+                    (Int(dryRunResult.effects?.gasUsed.storageRebate ?? "0")!)
+
+                self.setGasBudget(
+                    price: gasBudget > baseComputationCostWithOverhead ?
+                        BigInt(gasBudget) :
+                        BigInt(baseComputationCostWithOverhead)
+                )
             }
         }
 
         self.isPreparred = true
-    }
-    
-    private func prepareGasBudget(_ options: BuildOptions, blockData: [UInt8]) async throws -> BigInt {
-        guard let provider = options.provider else {
-            throw SuiError.customError(message: "Provider not found")
-        }
-
-        let dryRunResult = try await provider.dryRunTransactionBlock(transactionBlock: blockData)
-
-        guard dryRunResult.effects?.status.status != .failure else {
-            throw SuiError.customError(message: "Failed dry run transaction block with error: \(dryRunResult.effects?.status.error ?? "UNKNOWN_ERROR")")
-        }
-
-        let safeOverhead = Int(TransactionConstants.GAS_SAFE_OVERHEAD) * (
-            Int(self.blockData.builder.gasConfig.price ?? "1")!
-        )
-
-        let baseComputationCostWithOverhead =
-            (Int(dryRunResult.effects?.gasUsed.computationCost ?? "0")!) +
-            safeOverhead
-
-        let gasBudget =
-            baseComputationCostWithOverhead +
-            (Int(dryRunResult.effects?.gasUsed.storageCost ?? "0")!) -
-            (Int(dryRunResult.effects?.gasUsed.storageRebate ?? "0")!)
-        return gasBudget > baseComputationCostWithOverhead ?
-        BigInt(gasBudget) :
-        BigInt(baseComputationCostWithOverhead)
     }
 }
