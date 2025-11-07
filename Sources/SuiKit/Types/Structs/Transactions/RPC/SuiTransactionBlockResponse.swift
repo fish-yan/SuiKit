@@ -56,6 +56,8 @@ public struct SuiTransactionBlockResponse {
 
     /// An optional array of `String` representing any errors occurred during the transaction block response.
     public let errors: [String]?
+    
+    public let input: SuiTransactionBlockData?
 
     public init(input: JSON) {
         self.digest = input["digest"].stringValue
@@ -68,5 +70,6 @@ public struct SuiTransactionBlockResponse {
         self.objectChanges = input["objectChanges"].arrayValue.compactMap { SuiObjectChange.fromJSON($0) }
         self.balanceChanges = input["balanceChanges"].arrayValue.compactMap { BalanceChange(input: $0) }
         self.errors = input["errors"].arrayValue.compactMap { $0.string }
+        self.input = SuiTransactionBlockData(input: input["input"])
     }
 }
