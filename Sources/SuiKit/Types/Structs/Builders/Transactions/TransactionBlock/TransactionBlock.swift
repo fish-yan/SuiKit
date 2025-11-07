@@ -863,29 +863,25 @@ public class TransactionBlock {
                 guard dryRunResult.effects?.status.status != .failure else {
                     throw SuiError.customError(message: "Failed dry run transaction block with error: \(dryRunResult.effects?.status.error ?? "UNKNOWN_ERROR")")
                 }
-                
-                if let budget = dryRunResult.input?.gasData.budget {
-                    self.setGasBudget(price: BigInt(budget) ?? 0)
-                } else {
-                    let safeOverhead = Int(TransactionConstants.GAS_SAFE_OVERHEAD) * (
-                        Int(blockData.builder.gasConfig.price ?? "1")!
-                    )
-                    
-                    let baseComputationCostWithOverhead =
+
+                let safeOverhead = Int(TransactionConstants.GAS_SAFE_OVERHEAD) * (
+                    Int(blockData.builder.gasConfig.price ?? "1")!
+                )
+
+                let baseComputationCostWithOverhead =
                     (Int(dryRunResult.effects?.gasUsed.computationCost ?? "0")!) +
                     safeOverhead
-                    
-                    let gasBudget =
+
+                let gasBudget =
                     baseComputationCostWithOverhead +
                     (Int(dryRunResult.effects?.gasUsed.storageCost ?? "0")!) -
                     (Int(dryRunResult.effects?.gasUsed.storageRebate ?? "0")!)
-                    
-                    self.setGasBudget(
-                        price: gasBudget > baseComputationCostWithOverhead ?
+
+                self.setGasBudget(
+                    price: gasBudget > baseComputationCostWithOverhead ?
                         BigInt(gasBudget) :
-                            BigInt(baseComputationCostWithOverhead)
-                    )
-                }
+                        BigInt(baseComputationCostWithOverhead)
+                )
             }
         }
 
