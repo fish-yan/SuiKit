@@ -110,7 +110,7 @@ public struct StructTag: TypeProtocol, Equatable {
 }
 
 /// The value contents of a Struct Tag
-public struct StructTagValue: Equatable {
+public struct StructTagValue: Equatable, Sendable {
     /// The account address
     let address: AccountAddress
 

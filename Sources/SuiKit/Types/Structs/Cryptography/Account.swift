@@ -27,7 +27,7 @@ import Foundation
 import CryptoKit
 
 /// Sui Blockchain Account
-public struct Account: Equatable, Hashable {
+public struct Account: Equatable, Hashable, Sendable {
     /// Represents the type of cryptographic key associated with the account.
     /// For example, it could be `ed25519`, `secp256k1`, or `secp256r1`.
     public let accountType: KeyType

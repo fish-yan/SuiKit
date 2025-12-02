@@ -25,7 +25,7 @@
 
 import Foundation
 
-public protocol KeyProtocol: EncodingProtocol {
+public protocol KeyProtocol: EncodingProtocol, Sendable {
     /// Serializes an output instance using the given Serializer.
     ///
     /// - Parameter serializer: The Serializer instance used to serialize the data.

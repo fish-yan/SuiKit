@@ -26,7 +26,6 @@
 import Foundation
 import CryptoKit
 import Blake2
-import Bip39
 import BigInt
 
 #if os(iOS) || os(macOS) || os(watchOS) || os(visionOS)

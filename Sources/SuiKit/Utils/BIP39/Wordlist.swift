@@ -1,5 +1,5 @@
 //
-//  EncodingProtocol.swift
+//  Wordlist.swift
 //  SuiKit
 //
 //  Copyright (c) 2024-2025 OpenDive
@@ -24,24 +24,18 @@
 //
 
 import Foundation
-import UInt256
-@preconcurrency import AnyCodable
 
-public protocol EncodingProtocol: EncodingContainer, Sendable { }
+public struct Wordlist: Hashable, Equatable, Sendable {
+    public let words: [String]
+    public let indexes: [String: UInt16]
 
-extension UInt8: EncodingProtocol { }
-extension UInt16: EncodingProtocol { }
-extension UInt32: EncodingProtocol { }
-extension UInt64: EncodingProtocol { }
-extension UInt128: EncodingProtocol { }
-extension UInt256: EncodingProtocol { }
-extension Int: EncodingProtocol { }
-extension UInt: EncodingProtocol { }
+    public init(words: [String]) {
+        precondition(words.count == 2048, "Wrong amount of words")
+        self.words = words
+        let indexTuples = words.enumerated().map { ($0.element, UInt16($0.offset)) }
+        self.indexes = Dictionary(uniqueKeysWithValues: indexTuples)
+    }
 
-extension Bool: EncodingProtocol { }
-extension String: EncodingProtocol { }
-extension Data: EncodingProtocol { }
-extension String.UTF8View: EncodingProtocol { }
-
-extension Array: EncodingContainer where Element: EncodingProtocol { }
-extension Dictionary: EncodingContainer where Key: EncodingProtocol, Value: Any { }
+    public subscript(index: UInt16) -> String { words[Int(index)] }
+    public subscript(word: String) -> UInt16? { indexes[word] }
+}

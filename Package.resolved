@@ -28,15 +28,6 @@
       }
     },
     {
-      "identity" : "bip39.swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tesseract-one/Bip39.swift.git",
-      "state" : {
-        "revision" : "bb2b82539d685e1457493b695cdc8e4dcff97c92",
-        "version" : "0.2.0"
-      }
-    },
-    {
       "identity" : "blake2.swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tesseract-one/Blake2.swift.git",
