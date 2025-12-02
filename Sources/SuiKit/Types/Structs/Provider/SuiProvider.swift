@@ -444,6 +444,28 @@ public struct SuiProvider {
         return try self.parseNormalizedModules(result: result)
     }
 
+    /// Return structured representations of all modules in the given package (Swift 6 Concurrency).
+    /// - Parameter package: The string identifier of the package containing the modules.
+    /// - Throws: A `SuiError` if an error occurs during the JSON RPC call or if there are errors in the response data.
+    /// - Returns: A `SuiMoveNormalizedModules` object representing the normalized representation of the specified Move modules.
+    public func getNormalizedMoveModulesByPackageS6C(
+        package: String
+    ) async throws -> SuiMoveNormalizedModules {
+        let data = try await JsonRpcClient.sendSuiJsonRpc(
+            try self.getServerUrl(),
+            SuiRequestS6C(
+                "sui_getNormalizedMoveModulesByPackage",
+                [
+                    .string(package)
+                ]
+            )
+        )
+        let errorValue = self.hasErrors(JSON(data))
+        guard !(errorValue.hasError) else { throw SuiError.customError(message: "RPC Error: \(errorValue.localizedDescription)") }
+        let result = JSON(data)["result"]
+        return try self.parseNormalizedModules(result: result)
+    }
+
     /// Return a structured representation of Move struct.
     /// - Parameters:
     ///   - package: The string identifier of the package containing the module and struct.
