@@ -24,7 +24,6 @@
 //
 
 import Foundation
-@preconcurrency import AnyCodable
 
 /// Protocol defining the requirements for an RPC (Remote Procedure Call) error request.
 /// Conforming types are expected to provide a method name and arguments for the RPC call
@@ -35,6 +34,6 @@ public protocol RPCErrorRequest: Sendable {
     var method: String { get set }
 
     /// The list of arguments that were passed to the method during the call that resulted in an error.
-    /// Using `AnyCodable` allows for a flexible array that can contain multiple types, as long as they conform to `Codable`.
-    var args: [AnyCodable] { get set }
+    /// Using `SuiJSON` allows for a flexible array that can contain multiple types, as long as they conform to `Codable`.
+    var args: [SuiJSON] { get set }
 }

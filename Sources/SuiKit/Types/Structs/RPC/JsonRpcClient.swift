@@ -25,7 +25,6 @@
 
 import Foundation
 import SwiftyJSON
-@preconcurrency import AnyCodable
 
 public struct JsonRpcClient {
     /// Represents the package version.
@@ -96,27 +95,6 @@ public struct JsonRpcClient {
     /// - Returns: The received `Data`.
     /// - Throws: Encoding errors if the request cannot be encoded.
     public static func sendSuiJsonRpc(_ url: URL, _ request: SuiRequest) async throws -> Data {
-        var requestUrl = URLRequest(url: url)
-        requestUrl.allHTTPHeaderFields = ["Content-Type": "application/json"]
-        requestUrl.httpMethod = "POST"
-
-        do {
-            let requestData = try JSONEncoder().encode(request)
-            requestUrl.httpBody = requestData
-            let (data, _) = try await URLSession.shared.data(for: requestUrl)
-            return data
-        } catch {
-            throw SuiError.customError(message: "Encoding error")
-        }
-    }
-
-    /// Sends a JSON-RPC request and returns the received data (Swift 6 Concurrency).
-    /// - Parameters:
-    ///   - url: The URL of the JSON-RPC server.
-    ///   - request: The `SuiRequestS6C` to be sent.
-    /// - Returns: The received `Data`.
-    /// - Throws: Encoding errors if the request cannot be encoded.
-    public static func sendSuiJsonRpc(_ url: URL, _ request: SuiRequestS6C) async throws -> Data {
         var requestUrl = URLRequest(url: url)
         requestUrl.allHTTPHeaderFields = ["Content-Type": "application/json"]
         requestUrl.httpMethod = "POST"

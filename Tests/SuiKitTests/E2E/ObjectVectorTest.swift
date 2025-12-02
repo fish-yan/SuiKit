@@ -94,6 +94,7 @@ final class ObjectVectorTest: XCTestCase {
         }
     }
 
+    // TODO: Test fails - RPC Error: The operation couldn’t be completed.
     func testThatVectorObjectsAreAbleToBeInitialized() async throws {
         let toolBox = try self.fetchToolBox()
         try await toolBox.setup()

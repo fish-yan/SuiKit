@@ -24,15 +24,14 @@
 //
 
 import Foundation
-@preconcurrency import AnyCodable
 
-public struct ErrorObject: Codable {
+public struct ErrorObject: Codable, Sendable {
     /// Represents the error code, can be of any type that conforms to Codable.
-    public let code: AnyCodable
+    public let code: SuiJSON
 
     /// A string describing the error message related to the `code`.
     public let message: String
 
     /// Optional data providing additional information about the error, can be of any type that conforms to Codable.
-    public let data: AnyCodable?
+    public let data: SuiJSON?
 }

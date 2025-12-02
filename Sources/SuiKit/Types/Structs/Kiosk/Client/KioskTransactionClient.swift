@@ -24,7 +24,6 @@
 //
 
 import Foundation
-@preconcurrency import AnyCodable
 
 /**
  * A helper for building transactions that involve kiosk.

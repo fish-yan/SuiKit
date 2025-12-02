@@ -24,7 +24,6 @@
 //
 
 import Foundation
-@preconcurrency import AnyCodable
 
 /// Represents the parameters required for making a Remote Procedure Call (RPC).
 public struct RpcParameters: Codable, RPCErrorRequest {
@@ -32,6 +31,6 @@ public struct RpcParameters: Codable, RPCErrorRequest {
     public var method: String
 
     /// An array representing the arguments to be passed to the method.
-    /// The arguments are of type `AnyCodable` to accommodate different types of values.
-    public var args: [AnyCodable]
+    /// The arguments are of type `SuiJSON` to accommodate different types of values.
+    public var args: [SuiJSON]
 }

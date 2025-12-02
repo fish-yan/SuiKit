@@ -43,4 +43,3 @@
 - [ ] **Testing**
   - [ ] Run full test suite with Strict Concurrency Checking enabled (`-warn-concurrency` / Swift 6 mode).
   - [ ] Validate no data races in `Wallet` usage.
-

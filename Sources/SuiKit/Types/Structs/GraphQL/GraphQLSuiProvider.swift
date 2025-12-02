@@ -25,7 +25,6 @@
 
 import Foundation
 import SwiftyJSON
-@preconcurrency import AnyCodable
 import Blake2
 import Apollo
 import ApolloAPI

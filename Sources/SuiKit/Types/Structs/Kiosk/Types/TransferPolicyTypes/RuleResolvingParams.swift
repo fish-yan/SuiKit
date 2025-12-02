@@ -24,7 +24,6 @@
 //
 
 import Foundation
-@preconcurrency import AnyCodable
 
 /// The object a Rule resolving function accepts
 /// It can accept a set of fixed fields, that are part of every purchase flow as well any extra arguments to resolve custom policies!
@@ -41,5 +40,5 @@ public struct RuleResolvingParams {
     public let transferRequest: TransactionObjectArgument
     public let purchasedItem: TransactionObjectArgument
     public let packageId: String
-    public let extraArgs: [String: AnyCodable]
+    public let extraArgs: [String: SuiJSON]
 }

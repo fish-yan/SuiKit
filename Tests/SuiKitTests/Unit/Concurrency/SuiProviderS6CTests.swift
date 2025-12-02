@@ -36,7 +36,7 @@ final class SuiProviderS6CTests: XCTestCase {
         let packageId = "0x2"
         
         do {
-            let modules = try await provider.getNormalizedMoveModulesByPackageS6C(package: packageId)
+            let modules = try await provider.getNormalizedMoveModulesByPackage(package: packageId)
             
             // Assertions
             XCTAssertFalse(modules.isEmpty, "Modules should not be empty for package 0x2")

@@ -25,7 +25,6 @@
 
 import Foundation
 import UInt256
-@preconcurrency import AnyCodable
 
 public protocol EncodingProtocol: EncodingContainer, Sendable { }
 
