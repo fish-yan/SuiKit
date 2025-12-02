@@ -248,7 +248,7 @@ public struct Account: Equatable, Hashable, Sendable {
             }
             if lhs.privateKey.key.getType() == .p256 {
                 return
-                    (lhs.privateKey.key as! SecureEnclave.P256.Signing.PrivateKey) == (rhs.privateKey.key as! SecureEnclave.P256.Signing.PrivateKey) &&
+                    (lhs.privateKey.key as! P256PrivateKeyStorage) == (rhs.privateKey.key as! P256PrivateKeyStorage) &&
                     (lhs.publicKey.key as! P256.Signing.PublicKey) == (rhs.publicKey.key as! P256.Signing.PublicKey)
             }
         }
@@ -427,10 +427,18 @@ public struct Account: Equatable, Hashable, Sendable {
             )
         }
         if self.privateKey.key.getType() == .p256 {
-            return ExportedAccount(
-                schema: self.accountType,
-                privateKey: "\((privateKey.key as! SecureEnclave.P256.Signing.PrivateKey).rawRepresentation.base64EncodedString())"
-            )
+            switch (self.privateKey.key as! P256PrivateKeyStorage) {
+            case .secureEnclave(let key):
+                return ExportedAccount(
+                    schema: self.accountType,
+                    privateKey: "\(key.dataRepresentation.base64EncodedString())"
+                )
+            case .software(let key):
+                return ExportedAccount(
+                    schema: self.accountType,
+                    privateKey: "\(key.rawRepresentation.base64EncodedString())"
+                )
+            }
         }
         throw AccountError.cannotBeExported
     }

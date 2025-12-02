@@ -96,6 +96,10 @@ public enum AccountError: Error, Equatable {
     /// Indicates that the data or key cannot be exported.
     case cannotBeExported
 
+    /// This error is thrown if, by using CryptoKit, initializing the P256 Key throws an error.
+    /// Check the key to make sure it's valid.
+    case cannotCreateP256Key
+
     case incompatibleOS
 
     case keychainReadFail(message: String)
