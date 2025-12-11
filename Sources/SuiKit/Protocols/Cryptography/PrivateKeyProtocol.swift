@@ -26,7 +26,7 @@
 import Foundation
 
 /// Protocol defining the requirements for a private key type.
-public protocol PrivateKeyProtocol: KeyProtocol, CustomStringConvertible, Hashable {
+public protocol PrivateKeyProtocol: KeyProtocol, CustomStringConvertible, Hashable, Sendable {
     /// The type of the public key that corresponds to this private key.
     associatedtype PublicKeyType: PublicKeyProtocol
 

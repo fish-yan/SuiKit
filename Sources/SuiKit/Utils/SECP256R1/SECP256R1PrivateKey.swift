@@ -23,10 +23,13 @@
 //  THE SOFTWARE.
 //
 
+// TODO: Since we are able to use Apple's CryptoKit to handle P256 NIST keys,
+// TODO: we can go ahead and start migration efforts for backwards compatibility
+// TODO: with other devices that don't support the Secure Enclave.
+
 import Foundation
 import CryptoKit
 import Blake2
-import Bip39
 import BigInt
 
 #if os(iOS) || os(macOS) || os(watchOS) || os(visionOS)
@@ -39,36 +42,46 @@ public struct SECP256R1PrivateKey: PrivateKeyProtocol {
 
     public static let defaultDerivationPath: String = "m/74'/784'/0'/0/0"
 
-    public let key: SecureEnclave.P256.Signing.PrivateKey
+    public let key: P256PrivateKeyStorage
 
     public typealias PublicKeyType = SECP256R1PublicKey
 
-    public typealias DataValue = SecureEnclave.P256.Signing.PrivateKey
+    public typealias DataValue = P256PrivateKeyStorage
 
+    /// Initialize from raw private key data.
+    /// Uses software key storage since Secure Enclave keys cannot be initialized from raw data.
     public init(key: Data) throws {
-        guard SecureEnclave.isAvailable else { throw AccountError.incompatibleOS }
-        if let privateKey = try? SecureEnclave.P256.Signing.PrivateKey(rawRepresentation: key) {
-            self.key = privateKey
+        if let privateKey = try? CryptoKit.P256.Signing.PrivateKey(rawRepresentation: key) {
+            self.key = .software(privateKey)
         } else {
             throw AccountError.invalidData
         }
     }
 
+    /// Initialize a new private key.
+    /// If hasBiometrics is true, generates a Secure Enclave key with biometric access control.
+    /// Otherwise, generates a Secure Enclave key without biometric access control.
+    /// On unsupported platforms, falls back to generating a Secure Enclave key if available.
     public init(hasBiometrics: Bool = false) throws {
         if hasBiometrics {
             #if os(iOS) || os(macOS) || os(watchOS) || os(visionOS)
             guard SecureEnclave.isAvailable else { throw AccountError.incompatibleOS }
             let authContext = LAContext()
             let accessControl = Self.getBioSecAccessControl()
-            self.key = try SecureEnclave.P256.Signing.PrivateKey(accessControl: accessControl, authenticationContext: authContext)
+            let enclaveKey = try SecureEnclave.P256.Signing.PrivateKey(accessControl: accessControl, authenticationContext: authContext)
+            self.key = .secureEnclave(enclaveKey)
             #else
-            self.key = try SecureEnclave.P256.Signing.PrivateKey()
+            let enclaveKey = try SecureEnclave.P256.Signing.PrivateKey()
+            self.key = .secureEnclave(enclaveKey)
             #endif
         } else {
-            self.key = try SecureEnclave.P256.Signing.PrivateKey()
+            let enclaveKey = try SecureEnclave.P256.Signing.PrivateKey()
+            self.key = .secureEnclave(enclaveKey)
         }
     }
 
+    /// Initialize from mnemonic phrase and derivation path.
+    /// This generates a software private key derived from the mnemonic seed.
     public init(_ mnemonics: String, _ path: String = SECP256R1PrivateKey.defaultDerivationPath) throws {
         guard SecureEnclave.isAvailable else { throw AccountError.incompatibleOS }
         guard SECP256R1PrivateKey.isValidBIP32Path(path) else { throw AccountError.invalidDerivationPath }
@@ -80,18 +93,24 @@ public struct SECP256R1PrivateKey: PrivateKeyProtocol {
         try self.init(key: privateKey)
     }
 
+    /// Initialize from base64 encoded string.
+    /// Creates a software key from the decoded data.
     public init(value: String) throws {
         guard SecureEnclave.isAvailable else { throw AccountError.incompatibleOS }
         guard let data = Data.fromBase64(value) else { throw AccountError.invalidData }
         try self.init(key: data)
     }
 
+    /// Initialize from hex string.
+    /// Creates a software key from the decoded hex data.
     public init(hexString: String) throws {
         guard SecureEnclave.isAvailable else { throw AccountError.incompatibleOS }
         guard let data = hexString.data(using: .utf8) else { throw AccountError.invalidData }
         try self.init(key: data)
     }
 
+    /// Initialize from keychain stored key for the given account.
+    /// This attempts to create a Secure Enclave key from the raw key data.
     public init(account: String) throws {
         guard SecureEnclave.isAvailable else { throw AccountError.incompatibleOS }
         let query = [kSecClass: kSecClassGenericPassword,
@@ -101,8 +120,15 @@ public struct SECP256R1PrivateKey: PrivateKeyProtocol {
         var item: CFTypeRef?
         switch SecItemCopyMatching(query as CFDictionary, &item) {
         case errSecSuccess:
-            guard let data = item as? Data else { throw SuiError.notImplemented }
-            self.key = try SecureEnclave.P256.Signing.PrivateKey(rawRepresentation: data)
+            guard let data = item as? Data else { throw AccountError.invalidData }
+
+            // For software keys, we will be using Apple's CryptoKit P256 implementation.
+            // As Secure Enclave keys cannot be imported from an external source,
+            // they cannot be initialized with an already existing private key.
+            guard let p256 = try? CryptoKit.P256.Signing.PrivateKey(rawRepresentation: data) else {
+                throw AccountError.cannotCreateP256Key
+            }
+            self.key = .software(p256)
         case errSecItemNotFound: throw SuiError.notImplemented
         case let status: throw AccountError.keychainReadFail(message: "\(status)")
         }
@@ -112,27 +138,59 @@ public struct SECP256R1PrivateKey: PrivateKeyProtocol {
         return self.hex()
     }
 
+    /// Returns the public key corresponding to this private key.
     public func publicKey() throws -> SECP256R1PublicKey {
-        return SECP256R1PublicKey(key: self.key.publicKey)
+        switch self.key {
+        case .secureEnclave(let enclaveKey):
+            return SECP256R1PublicKey(key: enclaveKey.publicKey)
+        case .software(let softwareKey):
+            return SECP256R1PublicKey(key: softwareKey.publicKey)
+        }
     }
 
+    /// Returns the hex string representation of the private key.
+    /// The hex string is prefixed with "0x".
     public func hex() -> String {
-        return "0x\(self.key.rawRepresentation.hexEncodedString())"
+        switch self.key {
+        case .secureEnclave(let enclaveKey):
+            return "0x\(enclaveKey.dataRepresentation.hexEncodedString())"
+        case .software(let softwareKey):
+            return "0x\(softwareKey.rawRepresentation.hexEncodedString())"
+        }
     }
 
+    /// Returns the base64 encoded string of the private key raw representation.
     public func base64() -> String {
-        return self.key.rawRepresentation.base64EncodedString()
+        switch self.key {
+        case .secureEnclave(let enclaveKey):
+            return enclaveKey.dataRepresentation.base64EncodedString()
+        case .software(let softwareKey):
+            return softwareKey.rawRepresentation.base64EncodedString()
+        }
     }
 
+    /// Signs the given data using the private key.
+    /// Returns a normalized Signature.
     public func sign(data: Data) throws -> Signature {
-        let signature = try self.key.signature(for: data)
+        let signature: CryptoKit.P256.Signing.ECDSASignature
+        let publicKeyCompressed: Data
+        switch self.key {
+        case .secureEnclave(let enclaveKey):
+            signature = try enclaveKey.signature(for: data)
+            publicKeyCompressed = SECP256R1PublicKey(key: enclaveKey.publicKey).key.compressedRepresentation
+        case .software(let softwareKey):
+            signature = try softwareKey.signature(for: data)
+            publicKeyCompressed = SECP256R1PublicKey(key: softwareKey.publicKey).key.compressedRepresentation
+        }
+
         return Signature(
             signature: self.normalizeSignature(signature.rawRepresentation.hexEncodedString()),
-            publickey: try self.publicKey().key.compressedRepresentation,
+            publickey: publicKeyCompressed,
             signatureScheme: .SECP256R1
         )
     }
 
+    /// Signs the given bytes with an intent scope.
     public func signWithIntent(_ bytes: [UInt8], _ intent: IntentScope) throws -> Signature {
         let intentMessage = RawSigner.messageWithIntent(intent, Data(bytes))
         let digest = try Blake2b.hash(size: 32, data: intentMessage)
@@ -141,23 +199,37 @@ public struct SECP256R1PrivateKey: PrivateKeyProtocol {
         return signature
     }
 
+    /// Signs a transaction block.
     public func signTransactionBlock(_ bytes: [UInt8]) throws -> Signature {
         return try self.signWithIntent(bytes, .TransactionData)
     }
 
+    /// Signs a personal message.
     public func signPersonalMessage(_ bytes: [UInt8]) throws -> Signature {
         let ser = Serializer()
         try ser.sequence(bytes, Serializer.u8)
         return try self.signWithIntent([UInt8](ser.output()), .PersonalMessage)
     }
 
+    /// Stores the key in keychain for the given account.
+    /// Only supports storing software keys as Secure Enclave keys cannot be extracted.
     public func storeKey(account: String) throws {
+        let rawKeyData: Data
+        switch self.key {
+        case .secureEnclave(_):
+            // Secure Enclave keys cannot export raw private key material.
+            // Storing is not supported for Secure Enclave keys.
+            throw SuiError.notImplemented
+        case .software(let softwareKey):
+            rawKeyData = softwareKey.rawRepresentation
+        }
+
         let query = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrAccount: account,
             kSecAttrAccessible: kSecAttrAccessibleWhenUnlocked,
             kSecUseDataProtectionKeychain: true,
-            kSecValueData: self.key.rawRepresentation
+            kSecValueData: rawKeyData
         ] as [String: Any]
 
         // Add the key data.
@@ -176,7 +248,12 @@ public struct SECP256R1PrivateKey: PrivateKeyProtocol {
     }
 
     public func serialize(_ serializer: Serializer) throws {
-        try Serializer.toBytes(serializer, self.key.rawRepresentation)
+        switch self.key {
+        case .secureEnclave(let enclaveKey):
+            try Serializer.toBytes(serializer, enclaveKey.dataRepresentation)
+        case .software(let softwareKey):
+            try Serializer.toBytes(serializer, softwareKey.rawRepresentation)
+        }
     }
 
     /// The BIP32 path is a string representation used to derive keys from a seed in a hierarchical manner.
@@ -243,3 +320,4 @@ public struct SECP256R1PrivateKey: PrivateKeyProtocol {
         return access!
     }
 }
+

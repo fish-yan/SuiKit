@@ -25,7 +25,6 @@
 
 import Foundation
 import SwiftyJSON
-@preconcurrency import AnyCodable
 import Blake2
 import BigInt
 
@@ -63,10 +62,10 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_devInspectTransactionBlock",
                 [
-                    AnyCodable(senderAddress),
-                    AnyCodable(devInspectTxBytes),
-                    AnyCodable(gasPrice),
-                    AnyCodable(epoch)
+                    .string(senderAddress),
+                    .string(devInspectTxBytes),
+                    gasPrice.map { .number(Double($0)) } ?? .null,
+                    epoch.map { .string($0) } ?? .null
                 ]
             )
         )
@@ -87,7 +86,7 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_dryRunTransactionBlock",
                 [
-                    AnyCodable(transactionBlock.toBase64())
+                    .string(transactionBlock.toBase64())
                 ]
             )
         )
@@ -141,15 +140,29 @@ public struct SuiProvider {
         options: SuiTransactionBlockResponseOptions? = nil,
         requestType: SuiRequestType? = nil
     ) async throws -> SuiTransactionBlockResponse {
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+        
+        let requestTypeJSON: SuiJSON = try {
+            guard let requestType = requestType else { return .null }
+            let data = try JSONEncoder().encode(requestType)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "sui_executeTransactionBlock",
                 [
-                    AnyCodable(transactionBlock),
-                    AnyCodable([signature]),
-                    AnyCodable(options),
-                    AnyCodable(requestType)
+                    .string(transactionBlock),
+                    .array([.string(signature)]),
+                    optionsJSON,
+                    requestTypeJSON
                 ]
             )
         )
@@ -177,15 +190,29 @@ public struct SuiProvider {
         options: SuiTransactionBlockResponseOptions? = nil,
         requestType: SuiRequestType? = nil
     ) async throws -> SuiTransactionBlockResponse {
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+        
+        let requestTypeJSON: SuiJSON = try {
+            guard let requestType = requestType else { return .null }
+            let data = try JSONEncoder().encode(requestType)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "sui_executeTransactionBlock",
                 [
-                    AnyCodable(transactionBlock.toBase64()),
-                    AnyCodable([signature]),
-                    AnyCodable(options),
-                    AnyCodable(requestType)
+                    .string(transactionBlock.toBase64()),
+                    .array([.string(signature)]),
+                    optionsJSON,
+                    requestTypeJSON
                 ]
             )
         )
@@ -220,7 +247,7 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_getCheckpoint",
                 [
-                    AnyCodable(id)
+                    .string(id)
                 ]
             )
         )
@@ -247,9 +274,9 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_getCheckpoints",
                 [
-                    AnyCodable(cursor),
-                    AnyCodable(limit),
-                    AnyCodable(order == .descending ? true : false)
+                    cursor.map { .string($0) } ?? .null,
+                    limit.map { .number(Double($0)) } ?? .null,
+                    .bool(order == .descending)
                 ]
             )
         )
@@ -279,7 +306,7 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_getEvents",
                 [
-                    AnyCodable(transactionDigest)
+                    .string(transactionDigest)
                 ]
             )
         )
@@ -320,7 +347,7 @@ public struct SuiProvider {
     ) async throws -> [TransactionEffectsModifiedAtVersions] {
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
-            SuiRequest("sui_getLoadedChildObjects", [AnyCodable(digest)])
+            SuiRequest("sui_getLoadedChildObjects", [.string(digest)])
         )
         let errorValue = self.hasErrors(JSON(data))
         guard !(errorValue.hasError) else { throw SuiError.customError(message: "RPC Error: \(errorValue.localizedDescription)") }
@@ -345,9 +372,9 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_getMoveFunctionArgTypes",
                 [
-                    AnyCodable(package),
-                    AnyCodable(module),
-                    AnyCodable(function)
+                    .string(package),
+                    .string(module),
+                    .string(function)
                 ]
             )
         )
@@ -384,9 +411,9 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_getNormalizedMoveFunction",
                 [
-                    AnyCodable(package),
-                    AnyCodable(moduleName),
-                    AnyCodable(functionName)
+                    .string(package),
+                    .string(moduleName),
+                    .string(functionName)
                 ]
             )
         )
@@ -411,8 +438,8 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_getNormalizedMoveModule",
                 [
-                    AnyCodable(package),
-                    AnyCodable(module)
+                    .string(package),
+                    .string(module)
                 ]
             )
         )
@@ -434,7 +461,7 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_getNormalizedMoveModulesByPackage",
                 [
-                    AnyCodable(package)
+                    .string(package)
                 ]
             )
         )
@@ -461,9 +488,9 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_getNormalizedMoveStruct",
                 [
-                    AnyCodable(package),
-                    AnyCodable(module),
-                    AnyCodable(structure)
+                    .string(package),
+                    .string(module),
+                    .string(structure)
                 ]
             )
         )
@@ -484,13 +511,19 @@ public struct SuiProvider {
         options: SuiObjectDataOptions? = nil
     ) async throws -> SuiObjectResponse? {
         guard (try Inputs.normalizeSuiAddress(value: objectId)).isValidSuiAddress() else { throw SuiError.customError(message: "Unable to validate address") }
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "sui_getObject",
                 [
-                    AnyCodable(objectId),
-                    AnyCodable(options)
+                    .string(objectId),
+                    optionsJSON
                 ]
             )
         )
@@ -512,7 +545,7 @@ public struct SuiProvider {
             SuiRequest(
                 "sui_getProtocolConfig",
                 [
-                    AnyCodable(version)
+                    version.map { .string($0) } ?? .null
                 ]
             )
         )
@@ -564,13 +597,19 @@ public struct SuiProvider {
         options: SuiTransactionBlockResponseOptions? = nil
     ) async throws -> SuiTransactionBlockResponse {
         guard self.isValidTransactionDigest(digest) else { throw SuiError.customError(message: "Invalid digest") }
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "sui_getTransactionBlock",
                 [
-                    AnyCodable(digest),
-                    AnyCodable(options)
+                    .string(digest),
+                    optionsJSON
                 ]
             )
         )
@@ -594,13 +633,20 @@ public struct SuiProvider {
                 throw SuiError.customError(message: "Unable to validate address")
             }
         }
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+        let idsJSON: SuiJSON = .array(ids.map { .string($0) })
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "sui_multiGetObjects",
                 [
-                    AnyCodable(ids),
-                    AnyCodable(options)
+                    idsJSON,
+                    optionsJSON
                 ]
             )
         )
@@ -629,13 +675,20 @@ public struct SuiProvider {
             guard self.isValidTransactionDigest(digest) else { throw SuiError.customError(message: "Invalid digest") }
         }
         guard digests.count == Set(digests).count else { throw SuiError.customError(message: "Digest do not match: \(digests.count) != \(Set(digests).count)") }
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+        let digestsJSON: SuiJSON = .array(digests.map { .string($0) })
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "sui_multiGetTransactionBlocks",
                 [
-                    AnyCodable(digests),
-                    AnyCodable(options)
+                    digestsJSON,
+                    optionsJSON
                 ]
             )
         )
@@ -658,14 +711,20 @@ public struct SuiProvider {
         version: Int,
         options: SuiObjectDataOptions? = nil
     ) async throws -> ObjectRead? {
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "sui_tryGetPastObject",
                 [
-                    AnyCodable(id),
-                    AnyCodable(version),
-                    AnyCodable(options)
+                    .string(id),
+                    .number(Double(version)),
+                    optionsJSON
                 ]
             )
         )
@@ -687,13 +746,26 @@ public struct SuiProvider {
         objects: [GetPastObjectRequest],
         options: SuiObjectDataOptions? = nil
     ) async throws -> [ObjectRead] {
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+        
+        let objectsJSON: SuiJSON = try {
+            let data = try JSONEncoder().encode(objects)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "sui_tryMultiGetPastObjects",
                 [
-                    AnyCodable(objects),
-                    AnyCodable(options)
+                    objectsJSON,
+                    optionsJSON
                 ]
             )
         )
@@ -713,7 +785,7 @@ public struct SuiProvider {
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest("suix_getAllBalances", [
-                AnyCodable(try account.publicKey.toSuiAddress())
+                .string(try account.publicKey.toSuiAddress())
             ])
         )
         let errorValue = self.hasErrors(JSON(data))
@@ -751,9 +823,9 @@ public struct SuiProvider {
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest("suix_getAllCoins", [
-                AnyCodable(try account.toSuiAddress()),
-                AnyCodable(cursor),
-                AnyCodable(limit)
+                .string(try account.toSuiAddress()),
+                cursor.map { .string($0) } ?? .null,
+                limit.map { .number(Double($0)) } ?? .null
             ])
         )
         let errorValue = self.hasErrors(JSON(data))
@@ -792,8 +864,8 @@ public struct SuiProvider {
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest("suix_getBalance", [
-                AnyCodable(try account.toSuiAddress()),
-                AnyCodable(coinType)
+                .string(try account.toSuiAddress()),
+                coinType.map { .string($0) } ?? .null
             ])
         )
         let errorValue = self.hasErrors(JSON(data))
@@ -823,7 +895,7 @@ public struct SuiProvider {
             SuiRequest(
                 "suix_getCoinMetadata",
                 [
-                    AnyCodable(coinType)
+                    .string(coinType)
                 ]
             )
         )
@@ -860,10 +932,10 @@ public struct SuiProvider {
             SuiRequest(
                 "suix_getCoins",
                 [
-                    AnyCodable(account),
-                    AnyCodable(coinType),
-                    AnyCodable(cursor),
-                    AnyCodable(limit)
+                    .string(account),
+                    coinType.map { .string($0) } ?? .null,
+                    cursor.map { .string($0) } ?? .null,
+                    limit.map { .number(Double($0)) } ?? .null
                 ]
             )
         )
@@ -902,7 +974,7 @@ public struct SuiProvider {
             SuiRequest(
                 "suix_getCommitteeInfo",
                 [
-                    AnyCodable(epoch)
+                    .string(epoch)
                 ]
             )
         )
@@ -938,8 +1010,8 @@ public struct SuiProvider {
             SuiRequest(
                 "suix_getDynamicFieldObject",
                 [
-                    AnyCodable(parentId),
-                    AnyCodable(name)
+                    .string(parentId),
+                    .string(name)
                 ]
             )
         )
@@ -959,13 +1031,19 @@ public struct SuiProvider {
         parentId: String,
         name: DynamicFieldName
     ) async throws -> SuiObjectResponse? {
+        let nameJSON: SuiJSON = try {
+            let data = try JSONEncoder().encode(name)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+        
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "suix_getDynamicFieldObject",
                 [
-                    AnyCodable(parentId),
-                    AnyCodable(name)
+                    .string(parentId),
+                    nameJSON
                 ]
             )
         )
@@ -993,16 +1071,31 @@ public struct SuiProvider {
         cursor: String? = nil
     ) async throws -> DynamicFieldPage {
         guard (try Inputs.normalizeSuiAddress(value: parentId)).isValidSuiAddress() else { throw SuiError.customError(message: "Unable to validate address") }
+        
+        let filterJSON: SuiJSON = try {
+            guard let filter = filter else { return .null }
+            let data = try JSONEncoder().encode(filter)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+        
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "suix_getDynamicFields",
                 [
-                    AnyCodable(parentId),
-                    AnyCodable(cursor),
-                    AnyCodable(limit),
-                    AnyCodable(filter),
-                    AnyCodable(options)
+                    .string(parentId),
+                    cursor.map { .string($0) } ?? .null,
+                    limit.map { .number(Double($0)) } ?? .null,
+                    filterJSON,
+                    optionsJSON
                 ]
             )
         )
@@ -1077,20 +1170,32 @@ public struct SuiProvider {
         limit: Int? = nil
     ) async throws -> PaginatedObjectsResponse {
         guard owner.isValidSuiAddress() else { throw SuiError.customError(message: "Unable to validate address") }
+        let filterJSON: SuiJSON = try {
+            guard let filter = filter else { return .null }
+            let data = try JSONEncoder().encode(filter)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            let json = try JSONDecoder().decode(SuiJSON.self, from: data)
+            return json
+        }()
+        let queryJSON: SuiJSON = .object([
+            "filter": filterJSON,
+            "options": optionsJSON
+        ])
+        
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "suix_getOwnedObjects",
                 [
-                    AnyCodable(owner),
-                    AnyCodable(
-                        SuiObjectResponseQuery(
-                            filter: filter,
-                            options: options
-                        )
-                    ),
-                    AnyCodable(cursor),
-                    AnyCodable(limit)
+                    .string(owner),
+                    queryJSON,
+                    cursor.map { .string($0) } ?? .null,
+                    limit.map { .number(Double($0)) } ?? .null
                 ]
             )
         )
@@ -1130,7 +1235,7 @@ public struct SuiProvider {
             SuiRequest(
                 "suix_getStakes",
                 [
-                    AnyCodable(owner)
+                    .string(owner)
                 ]
             )
         )
@@ -1184,7 +1289,7 @@ public struct SuiProvider {
             SuiRequest(
                 "suix_getStakesByIds",
                 [
-                    AnyCodable(stakes)
+                    .array(stakes.map { .string($0) })
                 ]
             )
         )
@@ -1231,7 +1336,7 @@ public struct SuiProvider {
     public func totalSupply(_ coinType: String) async throws -> BigInt {
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
-            SuiRequest("suix_getTotalSupply", [AnyCodable(coinType)])
+            SuiRequest("suix_getTotalSupply", [.string(coinType)])
         )
         let resultString = try JSONDecoder().decode(JSON.self, from: data)["result"]["value"].stringValue
         guard let result = BigInt(resultString, radix: 10) else { throw NSError(domain: "Unable to convert to BigInt", code: -1) }
@@ -1265,15 +1370,30 @@ public struct SuiProvider {
         limit: Int? = nil,
         order: SortOrder? = nil
     ) async throws -> PaginatedSuiMoveEvent {
+        let queryJSON: SuiJSON = try {
+            guard let query = query else { return try {
+                let data = try JSONEncoder().encode(SuiEventFilter.all([]))
+                return try JSONDecoder().decode(SuiJSON.self, from: data)
+            }() }
+            let data = try JSONEncoder().encode(query)
+            return try JSONDecoder().decode(SuiJSON.self, from: data)
+        }()
+        
+        let cursorJSON: SuiJSON = try {
+            guard let cursor = cursor else { return .null }
+            let data = try JSONEncoder().encode(cursor)
+            return try JSONDecoder().decode(SuiJSON.self, from: data)
+        }()
+
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "suix_queryEvents",
                 [
-                    AnyCodable(query == nil ? SuiEventFilter.all([]) : query),
-                    AnyCodable(cursor),
-                    AnyCodable(limit),
-                    AnyCodable(order == .descending ? true : false)
+                    queryJSON,
+                    cursorJSON,
+                    limit.map { .number(Double($0)) } ?? .null,
+                    .bool(order == .descending)
                 ]
             )
         )
@@ -1306,20 +1426,32 @@ public struct SuiProvider {
         filter: TransactionFilter? = nil,
         options: SuiTransactionBlockResponseOptions? = nil
     ) async throws -> PaginatedTransactionResponse {
+        let filterJSON: SuiJSON = try {
+            guard let filter = filter else { return .null }
+            let data = try JSONEncoder().encode(filter)
+            return try JSONDecoder().decode(SuiJSON.self, from: data)
+        }()
+        
+        let optionsJSON: SuiJSON = try {
+            guard let options = options else { return .null }
+            let data = try JSONEncoder().encode(options)
+            return try JSONDecoder().decode(SuiJSON.self, from: data)
+        }()
+        
+        let queryJSON: SuiJSON = .object([
+            "filter": filterJSON,
+            "options": optionsJSON
+        ])
+
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest(
                 "suix_queryTransactionBlocks",
                 [
-                    AnyCodable(
-                        SuiTransactionBlockResponseQuery(
-                            filter: filter,
-                            options: options
-                        )
-                    ),
-                    AnyCodable(cursor),
-                    AnyCodable(limit),
-                    AnyCodable(order == .descending ? true : false)
+                    queryJSON,
+                    cursor.map { .string($0) } ?? .null,
+                    limit.map { .number(Double($0)) } ?? .null,
+                    .bool(order == .descending)
                 ]
             )
         )

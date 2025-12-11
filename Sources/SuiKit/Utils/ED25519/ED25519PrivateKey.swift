@@ -26,7 +26,6 @@
 import Foundation
 import ed25519swift
 import CryptoSwift
-import Bip39
 import Blake2
 
 /// Represents an ED25519 private key and provides functionality for signing and path derivation.

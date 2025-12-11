@@ -1,5 +1,5 @@
 //
-//  EncodingProtocol.swift
+//  SuiProviderS6CTests.swift
 //  SuiKit
 //
 //  Copyright (c) 2024-2025 OpenDive
@@ -23,24 +23,30 @@
 //  THE SOFTWARE.
 //
 
-import Foundation
-import UInt256
+import XCTest
+import SuiKit
 
-public protocol EncodingProtocol: EncodingContainer, Sendable { }
+final class SuiProviderS6CTests: XCTestCase {
+    func testGetNormalizedMoveModulesByPackageS6C() async throws {
+        // Connect to Sui Mainnet
+        let connection = MainnetConnection()
+        let provider = SuiProvider(connection: connection)
+        
+        // Package ID for `0x2` (Sui Framework)
+        let packageId = "0x2"
+        
+        do {
+            let modules = try await provider.getNormalizedMoveModulesByPackage(package: packageId)
+            
+            // Assertions
+            XCTAssertFalse(modules.isEmpty, "Modules should not be empty for package 0x2")
+            XCTAssertNotNil(modules["coin"], "Sui Framework should contain 'coin' module")
+            
+            // Optional: Print for verification
+            print("Successfully fetched \(modules.count) modules using S6C implementation")
+        } catch {
+            XCTFail("Failed to fetch modules with S6C implementation: \(error)")
+        }
+    }
+}
 
-extension UInt8: EncodingProtocol { }
-extension UInt16: EncodingProtocol { }
-extension UInt32: EncodingProtocol { }
-extension UInt64: EncodingProtocol { }
-extension UInt128: EncodingProtocol { }
-extension UInt256: EncodingProtocol { }
-extension Int: EncodingProtocol { }
-extension UInt: EncodingProtocol { }
-
-extension Bool: EncodingProtocol { }
-extension String: EncodingProtocol { }
-extension Data: EncodingProtocol { }
-extension String.UTF8View: EncodingProtocol { }
-
-extension Array: EncodingContainer where Element: EncodingProtocol { }
-extension Dictionary: EncodingContainer where Key: EncodingProtocol, Value: Any { }

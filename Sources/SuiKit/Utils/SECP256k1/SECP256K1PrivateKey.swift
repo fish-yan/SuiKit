@@ -24,7 +24,6 @@
 //
 
 import Foundation
-import Bip39
 import CryptoSwift
 import BigInt
 import Blake2

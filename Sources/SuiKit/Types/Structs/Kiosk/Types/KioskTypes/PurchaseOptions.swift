@@ -24,12 +24,11 @@
 //
 
 import Foundation
-@preconcurrency import AnyCodable
 
 public struct PurchaseOptions {
-    public let extraArgs: [String: AnyCodable]?
+    public let extraArgs: [String: SuiJSON]?
 
-    public init(extraArgs: [String: AnyCodable]? = nil) {
+    public init(extraArgs: [String: SuiJSON]? = nil) {
         self.extraArgs = extraArgs
     }
 }

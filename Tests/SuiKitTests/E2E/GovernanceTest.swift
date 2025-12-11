@@ -65,11 +65,13 @@ final class GovernanceTest: XCTestCase {
             options: SuiObjectDataOptions(showOwner: true)
         )
         try tx.setGasPayment(payments: coinObjects.map { $0.getObjectReference()! })
-        return try await client.signAndExecuteTransactionBlock(
+        let options = SuiTransactionBlockResponseOptions(showEffects: true)
+        let res = try await client.signAndExecuteTransactionBlock(
             transactionBlock: &tx,
             signer: account,
-            options: SuiTransactionBlockResponseOptions(showEffects: true)
+            options: options
         )
+        return try await client.waitForTransaction(tx: res.digest, options: options)
     }
 
     func testThatRequestToAddStakesWorksAsIntended() async throws {
@@ -87,10 +89,10 @@ final class GovernanceTest: XCTestCase {
         try await toolBox.setup()
         _ = try await self.addStake(toolBox.client, toolBox.account)
         let stakes = try await toolBox.client.getStakes(owner: try toolBox.address())
+        XCTAssertFalse(stakes.isEmpty)
         let stakesById = try await toolBox.client.getStakesByIds(
             stakes: [stakes[0].stakes[0].getStakeObject().stakeSuiId]
         )
-        XCTAssertGreaterThan(stakes.count, 0)
         XCTAssertEqual(stakesById[0].stakes[0], stakes[0].stakes[0])
     }
 

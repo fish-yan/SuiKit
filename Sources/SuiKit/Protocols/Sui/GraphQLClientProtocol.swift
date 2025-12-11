@@ -5,7 +5,7 @@
 //  Created by Marcus Arnett on 5/21/25.
 //
 
-public protocol GraphQLClientProtocol {
+public protocol GraphQLClientProtocol: Sendable {
     /// Verify a zkLogin signature using GraphQL
     /// - Parameters:
     ///   - bytes: The message bytes (transaction data or personal message) as Base64

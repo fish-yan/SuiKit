@@ -35,6 +35,7 @@ internal struct GraphQLClient {
     ///   - query: The query itself containing information such as user inputs parameters, the endpoint itself, and various other metadata for making the GraphQL client functional.
     /// - Returns: A GraphQLResult object of either T.Data type, or throws an error.
     internal static func fetchQuery<T: GraphQLQuery>(client: ApolloClient, query: T) async throws -> GraphQLResult<T.Data> {
+        print("DEBUG::: MARCUS - QUERY - \(query.__variables)\n\n")
         return try await withCheckedThrowingContinuation { (con: CheckedContinuation<GraphQLResult<T.Data>, Error>) in
             _ = client.fetch(query: query) { @Sendable result in
                 switch result {

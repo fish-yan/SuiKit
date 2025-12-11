@@ -25,7 +25,6 @@
 
 import Foundation
 import SwiftyJSON
-@preconcurrency import AnyCodable
 
 public struct JsonRpcClient {
     /// Represents the package version.

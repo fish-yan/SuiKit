@@ -84,6 +84,8 @@ final class DevInspectTest: XCTestCase {
         )
     }
 
+    // TODO: Test fails - VMVerificationOrDeserializationError,
+    // TODO: FAILED_TO_DESERIALIZE_ARGUMENT
     func testThatMoveCallsThatReturnStructsWorkAsIntended() async throws {
         let toolBox = try self.fetchToolBox()
         let coins = try await toolBox.getCoins()
