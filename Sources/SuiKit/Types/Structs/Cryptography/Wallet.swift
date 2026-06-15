@@ -26,19 +26,18 @@
 import Foundation
 import ed25519swift
 import CryptoSwift
-import Bip39
 
 /// Represents a Sui wallet, capable of managing multiple accounts.
-public class Wallet: Hashable {
+public struct Wallet: Hashable, Sendable {
     /// The mnemonic associated with the wallet, represented by a `Mnemonic` instance.
-    public var mnemonic: Mnemonic
+    public let mnemonic: Mnemonic
 
     /// An array of `Account` instances representing the accounts in the wallet.
-    public var accounts: [Account]
+    public let accounts: [Account]
 
     /// Convenience initializer to create a `Wallet` instance with a new mnemonic.
     /// - Throws: An error if there is any issue creating the mnemonic or initializing the wallet with it.
-    public convenience init() throws {
+    public init() throws {
         let mnemonic = try Mnemonic() // Generates a new mnemonic.
         try self.init(mnemonic: mnemonic) // Initializes the wallet with the newly created mnemonic.
     }
@@ -74,7 +73,7 @@ public class Wallet: Hashable {
     ///   - accountType: The type of account to be created in the wallet, defaulting to `.ed25519`.
     ///   - separator: The string that separates the mnemonic words in `mnemonicString`, defaulting to " ".
     /// - Throws: An error if there is any issue creating the mnemonic or initializing the wallet with it.
-    public convenience init(
+    public init(
         mnemonicString: String,
         accountType: KeyType = .ed25519,
         separator: String = " "

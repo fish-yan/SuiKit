@@ -24,12 +24,11 @@
 //
 
 import Foundation
-@preconcurrency import AnyCodable
 
 /**
  * A helper for building transactions that involve kiosk.
  */
-@available(iOS 16.0, *)
+@available(iOS 15.0, *)
 public class KioskTransactionClient {
     public var transactionBlock: TransactionBlock
     public let kioskClient: KioskClient

@@ -26,7 +26,9 @@
 import Foundation
 import UInt256
 
-extension UInt256: Codable {
+extension UInt256: @retroactive Decodable {}
+extension UInt256: @retroactive Encodable {}
+extension UInt256 {
     private enum CodingKeys: String, CodingKey {
         case parts = "parts"
     }

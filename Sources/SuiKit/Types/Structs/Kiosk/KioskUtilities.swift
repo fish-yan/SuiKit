@@ -25,7 +25,7 @@
 
 import Foundation
 
-@available(iOS 16.0, *)
+@available(iOS 15.0, *)
 public struct KioskUtilities {
     public static let defaultQueryLimit = 50
 
@@ -292,7 +292,7 @@ public struct KioskUtilities {
     /// Normalizes the packageId part of a rule's type.
     public static func getNormalizedRuleType(rule: String) throws -> String {
         if #available(macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
-            var normalizedRuleAddress = rule.split(separator: "::").map { String($0) }
+            var normalizedRuleAddress = rule.components(separatedBy: "::")
             normalizedRuleAddress[0] = try Inputs.normalizeSuiAddress(value: normalizedRuleAddress[0])
             return normalizedRuleAddress.joined(separator: "::")
         } else {

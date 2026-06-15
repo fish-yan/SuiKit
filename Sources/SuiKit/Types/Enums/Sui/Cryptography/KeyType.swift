@@ -29,7 +29,7 @@ import Foundation
 ///
 /// - `ed25519`: Represents the Ed25519 cryptographic algorithm.
 /// - `secp256k1`: Represents the SECP256K1 cryptographic algorithm.
-public enum KeyType: String, Equatable {
+public enum KeyType: String, Equatable, Sendable {
     /// Represents the ED25519 cryptographic algorithm.
     case ed25519 = "ED25519"
 

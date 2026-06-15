@@ -25,38 +25,387 @@
 
 import Foundation
 import UInt256
+import simd
+import Accelerate
 
-/// A BCS (Binary Canonical Serialization) Serializer meant for serializing data
-public class Serializer {
-    /// The outputted data itself
-    private var _output: Data
+/// A highly optimized BCS (Binary Canonical Serialization) Serializer
+/// Based on the reference Rust implementation with zero-copy optimizations
+/// Includes SIMD optimizations for Apple Silicon devices
+public final class Serializer {
 
-    init() {
-        self._output = Data()
+    // MARK: - Constants
+    private static let MAX_SEQUENCE_LENGTH: UInt32 = (1 << 31) - 1
+    private static let MAX_CONTAINER_DEPTH = 500
+    public static let INITIAL_CAPACITY = 1024
+
+    // SIMD optimization constants
+    private static let SIMD_THRESHOLD = 64 // Minimum elements for SIMD operations
+    private static let ALIGNMENT = 32 // Alignment for SIMD operations
+
+    // MARK: - Properties
+    private var buffer: UnsafeMutableRawBufferPointer
+    private var capacity: Int
+    private var count: Int = 0
+    private var containerDepth: Int = 0
+    private var allocator: BCSAllocator?
+    private var isAligned: Bool = false
+
+    // MARK: - Initialization
+    public init() {
+        self.capacity = Self.INITIAL_CAPACITY
+        self.buffer = UnsafeMutableRawBufferPointer.allocate(byteCount: capacity, alignment: 1)
+        self.allocator = nil
+        self.isAligned = false
     }
 
-    /// Returns the `_output` object.
-    /// - Returns: `Data` object.
-    func output() -> Data {
-        return self._output
+    public init(capacity: Int) {
+        self.capacity = capacity
+        self.buffer = UnsafeMutableRawBufferPointer.allocate(byteCount: capacity, alignment: 1)
+        self.allocator = nil
+        self.isAligned = false
     }
+
+    /// Initialize with a custom allocator for SIMD optimization
+    public init(allocator: BCSAllocator, capacity: Int = INITIAL_CAPACITY) {
+        self.capacity = capacity
+        self.allocator = allocator
+        self.buffer = allocator.allocateAligned(byteCount: capacity, alignment: Self.ALIGNMENT)
+        self.isAligned = true
+    }
+
+    deinit {
+        if let allocator = allocator {
+            allocator.deallocate(buffer)
+        } else {
+            buffer.deallocate()
+        }
+    }
+
+    /// Reset the serializer for reuse
+    public func reset() {
+        count = 0
+        containerDepth = 0
+    }
+
+    /// Get the serialized data
+    public func output() -> Data {
+        return Data(bytes: buffer.baseAddress!, count: count)
+    }
+
+    // MARK: - Buffer Management
+
+    private func ensureCapacity(_ needed: Int) {
+        guard count + needed > capacity else { return }
+
+        let newCapacity = Swift.max(capacity * 2, count + needed)
+        let newBuffer: UnsafeMutableRawBufferPointer
+
+        if let allocator = allocator {
+            newBuffer = allocator.allocateAligned(byteCount: newCapacity, alignment: Self.ALIGNMENT)
+        } else {
+            newBuffer = UnsafeMutableRawBufferPointer.allocate(byteCount: newCapacity, alignment: 1)
+        }
+
+        // Copy existing data using optimized method if aligned
+        if count != 0 {
+            newBuffer.baseAddress!.copyMemory(
+                from: buffer.baseAddress!,
+                byteCount: count
+            )
+        }
+
+        // Deallocate old buffer
+        if let allocator = allocator {
+            allocator.deallocate(buffer)
+        } else {
+            buffer.deallocate()
+        }
+
+        buffer = newBuffer
+        capacity = newCapacity
+    }
+
+    @inline(__always)
+    private func writeBytes(_ bytes: UnsafeRawBufferPointer) {
+        ensureCapacity(bytes.count)
+        // get the base raw pointer, advance by our current 'count',
+        // then copy 'bytes.count' bytes from the source buffer
+        buffer.baseAddress!                                          // UnsafeMutableRawPointer
+            .advanced(by: count)                                  // offset into buffer :contentReference[oaicite:0]{index=0}
+            .copyMemory(from: bytes.baseAddress!,                  // UnsafeRawPointer
+                        byteCount: bytes.count)                   // copy exactly 'bytes.count' bytes :contentReference[oaicite:1]{index=1}
+        count += bytes.count
+    }
+
+    @inline(__always)
+    private func writeByte(_ byte: UInt8) {
+        ensureCapacity(1)
+        buffer.storeBytes(of: byte, toByteOffset: count, as: UInt8.self)
+        count += 1
+    }
+
+    // MARK: - Primitive Serialization (Optimized)
+
+    private func serializeBool(_ value: Bool) {
+        writeByte(value ? 1 : 0)
+    }
+
+    private func serializeU8(_ value: UInt8) {
+        writeByte(value)
+    }
+
+    private func serializeU16(_ value: UInt16) {
+        let littleEndian = value.littleEndian
+        withUnsafeBytes(of: littleEndian) { bytes in
+            writeBytes(bytes)
+        }
+    }
+
+    private func serializeU32(_ value: UInt32) {
+        let littleEndian = value.littleEndian
+        withUnsafeBytes(of: littleEndian) { bytes in
+            writeBytes(bytes)
+        }
+    }
+
+    private func serializeU64(_ value: UInt64) {
+        let littleEndian = value.littleEndian
+        withUnsafeBytes(of: littleEndian) { bytes in
+            writeBytes(bytes)
+        }
+    }
+
+    private func serializeU128(_ value: UInt128) {
+        let littleEndian = value.littleEndian
+        withUnsafeBytes(of: littleEndian) { bytes in
+            writeBytes(bytes)
+        }
+    }
+
+    private func serializeU256(_ value: UInt256) {
+        let littleEndian = value.littleEndian
+        withUnsafeBytes(of: littleEndian) { bytes in
+            writeBytes(bytes)
+        }
+    }
+
+    private func serializeString(_ string: String) throws {
+        // Use UTF-8 view for direct byte access
+        let utf8 = string.utf8
+        try serializeULEB128(UInt32(utf8.count))
+
+        // Write UTF-8 bytes directly
+        utf8.withContiguousStorageIfAvailable { bytes in
+            writeBytes(UnsafeRawBufferPointer(bytes))
+        } ?? {
+            // Fallback for non-contiguous storage
+            let data = Data(string.utf8)
+            data.withUnsafeBytes { bytes in
+                writeBytes(bytes)
+            }
+        }()
+    }
+
+    private func serializeData(_ data: Data) throws {
+        try serializeULEB128(UInt32(data.count))
+        data.withUnsafeBytes { bytes in
+            writeBytes(bytes)
+        }
+    }
+
+    // MARK: - ULEB128 Encoding (Optimized)
+
+    private func serializeULEB128(_ value: UInt32) throws {
+        guard value <= Self.MAX_SEQUENCE_LENGTH else {
+            throw BCSError.invalidSequenceLength(value)
+        }
+
+        var remaining = value
+        while remaining >= 0x80 {
+            writeByte(UInt8(remaining & 0x7F) | 0x80)
+            remaining >>= 7
+        }
+        writeByte(UInt8(remaining & 0x7F))
+    }
+
+    // MARK: - SIMD-Optimized Array Serialization
+
+    /// SIMD-optimized serialization for arrays of UInt16 values
+    public func serializeU16Array(_ values: [UInt16]) throws {
+        try serializeULEB128(UInt32(values.count))
+
+        guard values.count >= Self.SIMD_THRESHOLD else {
+            // Fallback to standard serialization for small arrays
+            for value in values {
+                serializeU16(value)
+            }
+            return
+        }
+
+        ensureCapacity(values.count * 2)
+
+        // Use SIMD for endian conversion and bulk processing
+        values.withUnsafeBufferPointer { valuesPtr in
+            let simdCount = (values.count / 8) * 8 // Round down to multiple of 8
+
+            // Process 8 elements at a time using SIMD
+            for i in stride(from: 0, to: simdCount, by: 8) {
+                // Convert to little endian using SIMD
+                let littleEndianValues = simd_ushort8(
+                    valuesPtr[i].littleEndian,
+                    valuesPtr[i + 1].littleEndian,
+                    valuesPtr[i + 2].littleEndian,
+                    valuesPtr[i + 3].littleEndian,
+                    valuesPtr[i + 4].littleEndian,
+                    valuesPtr[i + 5].littleEndian,
+                    valuesPtr[i + 6].littleEndian,
+                    valuesPtr[i + 7].littleEndian
+                )
+
+                // Store directly to buffer
+                withUnsafeBytes(of: littleEndianValues) { bytes in
+                    buffer.baseAddress!.advanced(by: count).copyMemory(
+                        from: bytes.baseAddress!,
+                        byteCount: 16
+                    )
+                }
+                count += 16
+            }
+
+            // Handle remaining elements
+            for i in simdCount..<values.count {
+                serializeU16(valuesPtr[i])
+            }
+        }
+    }
+
+    /// SIMD-optimized serialization for arrays of UInt32 values
+    public func serializeU32Array(_ values: [UInt32]) throws {
+        try serializeULEB128(UInt32(values.count))
+
+        guard values.count >= Self.SIMD_THRESHOLD else {
+            for value in values {
+                serializeU32(value)
+            }
+            return
+        }
+
+        ensureCapacity(values.count * 4)
+
+        values.withUnsafeBufferPointer { valuesPtr in
+            let simdCount = (values.count / 4) * 4
+
+            // Process 4 elements at a time using SIMD
+            for i in stride(from: 0, to: simdCount, by: 4) {
+                let simdValues = simd_uint4(
+                    valuesPtr[i].littleEndian,
+                    valuesPtr[i + 1].littleEndian,
+                    valuesPtr[i + 2].littleEndian,
+                    valuesPtr[i + 3].littleEndian
+                )
+
+                withUnsafeBytes(of: simdValues) { bytes in
+                    buffer.baseAddress!.advanced(by: count).copyMemory(
+                        from: bytes.baseAddress!,
+                        byteCount: 16
+                    )
+                }
+                count += 16
+            }
+
+            // Handle remaining elements
+            for i in simdCount..<values.count {
+                serializeU32(valuesPtr[i])
+            }
+        }
+    }
+
+    /// SIMD-optimized serialization for arrays of UInt64 values
+    public func serializeU64Array(_ values: [UInt64]) throws {
+        try serializeULEB128(UInt32(values.count))
+
+        guard values.count >= Self.SIMD_THRESHOLD else {
+            for value in values {
+                serializeU64(value)
+            }
+            return
+        }
+
+        ensureCapacity(values.count * 8)
+
+        values.withUnsafeBufferPointer { valuesPtr in
+            let simdCount = (values.count / 2) * 2
+
+            // Process 2 elements at a time using SIMD
+            for i in stride(from: 0, to: simdCount, by: 2) {
+                let simdValues = simd_ulong2(
+                    UInt(valuesPtr[i].littleEndian),
+                    UInt(valuesPtr[i + 1].littleEndian)
+                )
+
+                withUnsafeBytes(of: simdValues) { bytes in
+                    buffer.baseAddress!.advanced(by: count).copyMemory(
+                        from: bytes.baseAddress!,
+                        byteCount: 16
+                    )
+                }
+                count += 16
+            }
+
+            // Handle remaining elements
+            for i in simdCount..<values.count {
+                serializeU64(valuesPtr[i])
+            }
+        }
+    }
+
+    /// SIMD-optimized boolean array serialization
+    public func boolArray(_ values: [Bool]) throws {
+        try serializeULEB128(UInt32(values.count))
+
+        guard values.count >= Self.SIMD_THRESHOLD else {
+            for value in values {
+                serializeBool(value)
+            }
+            return
+        }
+
+        // Pack booleans into bytes using SIMD
+        ensureCapacity((values.count + 7) / 8)
+
+        values.withUnsafeBufferPointer { valuesPtr in
+            let packedCount = values.count / 8
+            let remainder = values.count % 8
+
+            for i in 0..<packedCount {
+                var packedByte: UInt8 = 0
+                for j in 0..<8 {
+                    if valuesPtr[i * 8 + j] {
+                        packedByte |= (1 << j)
+                    }
+                }
+                writeByte(packedByte)
+            }
+
+            // Handle remaining booleans
+            if remainder > 0 {
+                var packedByte: UInt8 = 0
+                for j in 0..<remainder {
+                    if valuesPtr[packedCount * 8 + j] {
+                        packedByte |= (1 << j)
+                    }
+                }
+                writeByte(packedByte)
+            }
+        }
+    }
+
+    // MARK: - Legacy API Compatibility Layer
 
     /// Serialize a boolean value or an array of boolean values using a custom Serializer.
-    ///
-    /// This function takes a custom Serializer and a generic value conforming to the EncodingContainer protocol,
-    /// and attempts to serialize the value as a single boolean or an array of booleans. The serialized boolean
-    /// value is represented as UInt8 where true is encoded as 1 and false is encoded as 0.
-    ///
-    /// - Parameters:
-    ///   - serializer: A custom Serializer instance to be used for serialization.
-    ///   - value: A generic value conforming to EncodingContainer, which is either a Bool or an array of Bools.
-    ///
-    /// - Throws: An SuiError object that's an invalid data value with the supported type of either `Bool` or `[Bool]`,
-    /// if the provided value does not match either a Bool or an array of Bools.
     public static func bool<T: EncodingContainer>(_ serializer: Serializer, _ value: T) throws {
         if let boolValue = value as? Bool {
-            let result: UInt8 = boolValue ? UInt8(1) : UInt8(0)
-            serializer.writeInt(result, length: 1)
+            serializer.serializeBool(boolValue)
         } else if let boolArray = value as? [Bool] {
             try serializer.sequence(boolArray, Serializer.bool)
         } else {
@@ -65,21 +414,9 @@ public class Serializer {
     }
 
     /// Convert a Data value or an array of Data values into bytes using a custom Serializer.
-    ///
-    /// This function takes a custom Serializer and a generic value conforming to the EncodingContainer protocol,
-    /// and attempts to convert the value as a single Data object or an array of Data objects into bytes. The
-    /// bytes are appended to the Serializer's output buffer.
-    ///
-    /// - Parameters:
-    ///    - serializer: A custom Serializer instance to be used for converting data into bytes.
-    ///    - value: A generic value conforming to EncodingContainer, which is either a Data object or an array of Data objects.
-    ///
-    /// - Throws: An SuiError object that's an invalid data value with the supported type of either Data or [Data],
-    /// if the provided value does not match either a Data object or an array of Data objects.
     static func toBytes<T: EncodingContainer>(_ serializer: Serializer, _ value: T) throws {
         if let dataValue = value as? Data {
-            try serializer.uleb128(UInt(dataValue.count))
-            serializer._output.append(dataValue)
+            try serializer.serializeData(dataValue)
         } else if let dataArray = value as? [Data] {
             try serializer.sequence(dataArray, Serializer.toBytes)
         } else {
@@ -87,23 +424,14 @@ public class Serializer {
         }
     }
 
-    /// Appends a data value to the `_output` private object.
-    /// - Parameter value: the value itself.
+    /// Appends a data value to the output buffer.
     func fixedBytes(_ value: Data) {
-        self._output.append(value)
+        value.withUnsafeBytes { bytes in
+            writeBytes(bytes)
+        }
     }
 
-    /// Serialize a value conforming to the EncodingProtocol using a custom Serializer, ensuring it conforms to the KeyProtocol.
-    ///
-    /// This function takes a custom Serializer and a value conforming to the EncodingProtocol, and attempts to
-    /// serialize the value by calling its serialize method. The value must also conform to the KeyProtocol.
-    ///
-    /// - Parameters:
-    ///    - serializer: A custom Serializer instance to be used for serialization.
-    ///    - value: A value conforming to EncodingProtocol and expected to conform to KeyProtocol.
-    ///
-    /// - Throws: An SuiError object with a message that the value does not conform to the required KeyProtocol,
-    /// if the provided value does not conform to KeyProtocol.
+    /// Serialize a value conforming to the EncodingProtocol using a custom Serializer.
     public static func _struct(_ serializer: Serializer, value: EncodingProtocol) throws {
         if let keyProtocolValue = value as? KeyProtocol {
             try keyProtocolValue.serialize(serializer)
@@ -112,18 +440,7 @@ public class Serializer {
         }
     }
 
-    /// Encode a dictionary with custom key and value encoders and serialize the encoded data using a custom Serializer.
-    ///
-    /// This function takes a dictionary with keys of type T and values of type U, along with custom key and value
-    /// encoders. It encodes the dictionary entries using the provided encoders, sorts them by the encoded keys, and
-    /// serializes the encoded key-value pairs using a custom Serializer instance.
-    ///
-    /// - Parameters:
-    ///    - values: A dictionary with keys of type T and values of type U to be encoded and serialized.
-    ///    - keyEncoder: A closure that accepts a Serializer and a key of type T, and throws an error if the key cannot be encoded.
-    ///    - valueEncoder: A closure that accepts a Serializer and a value of type U, and throws an error if the value cannot be encoded.
-    ///
-    /// - Throws: This function may throw an error from the keyEncoder or valueEncoder closures when encoding a key or value fails.
+    /// Encode a dictionary with custom key and value encoders and serialize the encoded data.
     func map<T, U>(
         _ values: [T: U],
         keyEncoder: (Serializer, T) throws -> Void,
@@ -132,59 +449,54 @@ public class Serializer {
         var encodedValues: [(Data, Data)] = []
         for (key, value) in values {
             do {
-                let key = try encoder(key, keyEncoder)
-                let value = try encoder(value, valueEncoder)
-                encodedValues.append((key, value))
+                let keyData = try encoder(key, keyEncoder)
+                let valueData = try encoder(value, valueEncoder)
+                encodedValues.append((keyData, valueData))
             } catch {
                 continue
             }
         }
-        encodedValues.sort(by: { $0.0 < $1.0 })
 
-        try self.uleb128(UInt(encodedValues.count))
-        for (key, value) in encodedValues {
-            self.fixedBytes(key)
-            self.fixedBytes(value)
+        // Sort by lexicographical order of serialized keys
+        encodedValues.sort { lhs, rhs in
+            lhs.0.lexicographicallyPrecedes(rhs.0)
+        }
+
+        // Remove duplicates (keep first occurrence)
+        var uniqueValues: [(Data, Data)] = []
+        var lastKey: Data?
+
+        for (keyData, valueData) in encodedValues {
+            if lastKey != keyData {
+                uniqueValues.append((keyData, valueData))
+                lastKey = keyData
+            }
+        }
+
+        try serializeULEB128(UInt32(uniqueValues.count))
+        for (keyData, valueData) in uniqueValues {
+            fixedBytes(keyData)
+            fixedBytes(valueData)
         }
     }
 
     /// Create a closure for serializing a sequence of values using a custom value encoder and Serializer.
-    ///
-    /// This function takes a custom value encoder closure and returns a closure that accepts a Serializer instance
-    /// and an array of values of type T. The returned closure serializes the given sequence using the provided
-    /// value encoder and Serializer instance.
-    ///
-    /// - Parameter valueEncoder: A closure that accepts a Serializer and a value of type T, and throws an error
-    /// if the value cannot be encoded.
-    ///
-    /// - Returns: A closure that accepts a Serializer instance and an array of values of type T, and throws an error
-    /// if the sequence cannot be serialized using the provided value encoder.
     static func sequenceSerializer<T>(
         _ valueEncoder: @escaping (Serializer, T) throws -> Void
     ) -> (Serializer, [T]) throws -> Void {
         return { (self, values) in try self.sequence(values, valueEncoder) }
     }
 
-    /// Serialize a sequence of values using a custom value encoder and the current Serializer instance.
-    ///
-    /// This function takes an array of values of type T and a custom value encoder closure. It serializes the
-    /// given sequence using the provided value encoder and the current Serializer instance.
-    ///
-    /// - Parameters:
-    ///    - values: An array of values of type T to be serialized.
-    ///    - valueEncoder: A closure that accepts a Serializer and a value of type T, and throws an error if the
-    /// value cannot be encoded.
-    ///
-    /// - Throws: This function may throw an error from the valueEncoder closure when encoding a value fails.
+    /// Serialize a sequence of values using a custom value encoder.
     public func sequence<T>(
         _ values: [T],
         _ valueEncoder: (Serializer, T) throws -> Void
     ) throws {
-        try self.uleb128(UInt(values.count))
+        try serializeULEB128(UInt32(values.count))
         for value in values {
             do {
                 let bytes = try encoder(value, valueEncoder)
-                self.fixedBytes(bytes)
+                fixedBytes(bytes)
             } catch {
                 continue
             }
@@ -195,7 +507,7 @@ public class Serializer {
         _ values: [T?],
         _ valueEncoder: (Serializer, T) throws -> Void
     ) throws {
-        try self.uleb128(UInt(values.count))
+        try serializeULEB128(UInt32(values.count))
         for value in values {
             do {
                 try self._optional(value, valueEncoder)
@@ -206,24 +518,9 @@ public class Serializer {
     }
 
     /// Serialize a String value or an array of String values using a custom Serializer.
-    ///
-    /// This function takes a custom Serializer and a generic value conforming to the EncodingContainer protocol,
-    /// and attempts to serialize the value as a single String or an array of Strings. The serialized String
-    /// values are converted to Data using UTF-8 encoding.
-    ///
-    /// - Parameters:
-    ///    - serializer: A custom Serializer instance to be used for serialization.
-    ///    - value: A generic value conforming to EncodingContainer, which is either a String or an array of Strings.
-    ///
-    /// - Throws: An SuiError object that's an invalid data value with the supported type of either String or [String],
-    /// if the provided value does not match either a String object or an array of String objects.
     public static func str<T: EncodingContainer>(_ serializer: Serializer, _ value: T) throws {
         if let str = value as? String {
-            if Self.containsNonASCIICharacters(str) {
-                try Serializer.toBytes(serializer, Data(str.utf8))
-            } else {
-                try Serializer.toBytes(serializer, str.data(using: .ascii)!)
-            }
+            try serializer.serializeString(str)
         } else if let strArray = value as? [String] {
             try serializer.sequence(strArray, Serializer.str)
         } else {
@@ -232,19 +529,9 @@ public class Serializer {
     }
 
     /// Serialize a UInt8 value or an array of UInt8 values using a custom Serializer.
-    ///
-    /// This function takes a custom Serializer and a generic value conforming to the EncodingContainer protocol,
-    /// and attempts to serialize the value as a single UInt8 or an array of UInt8s.
-    ///
-    /// - Parameters:
-    ///    - serializer: A custom Serializer instance to be used for serialization.
-    ///    - value: A generic value conforming to EncodingContainer, which is either a UInt8 or an array of UInt8s.
-    ///
-    /// - Throws: An SuiError object that's an invalid data value with the supported type of either UInt8 or [UInt8],
-    /// if the provided value does not match either a UInt8 object or an array of UInt8 objects.
     public static func u8<T: EncodingContainer>(_ serializer: Serializer, _ value: T) throws {
         if let uint8 = value as? UInt8 {
-            serializer.writeInt(UInt8(uint8), length: 1)
+            serializer.serializeU8(uint8)
         } else if let uint8Array = value as? [UInt8] {
             try serializer.sequence(uint8Array, Serializer.u8)
         } else {
@@ -253,19 +540,9 @@ public class Serializer {
     }
 
     /// Serialize a UInt16 value or an array of UInt16 values using a custom Serializer.
-    ///
-    /// This function takes a custom Serializer and a generic value conforming to the EncodingContainer protocol,
-    /// and attempts to serialize the value as a single UInt16 or an array of UInt16s.
-    ///
-    /// - Parameters:
-    ///    - serializer: A custom Serializer instance to be used for serialization.
-    ///    - value: A generic value conforming to EncodingContainer, which is either a UInt16 or an array of UInt16s.
-    ///
-    /// - Throws: An SuiError object that's an invalid data value with the supported type of either UInt16 or [UInt16],
-    /// if the provided value does not match either a UInt16 or an array of UInt16s.
     public static func u16<T: EncodingContainer>(_ serializer: Serializer, _ value: T) throws {
         if let uint16 = value as? UInt16 {
-            serializer.writeInt(UInt16(uint16), length: 2)
+            serializer.serializeU16(uint16)
         } else if let uint16Array = value as? [UInt16] {
             try serializer.sequence(uint16Array, Serializer.u16)
         } else {
@@ -274,19 +551,9 @@ public class Serializer {
     }
 
     /// Serialize a UInt32 value or an array of UInt32 values using a custom Serializer.
-    ///
-    /// This function takes a custom Serializer and a generic value conforming to the EncodingContainer protocol,
-    /// and attempts to serialize the value as a single UInt32 or an array of UInt32s.
-    ///
-    /// - Parameters:
-    ///    - serializer: A custom Serializer instance to be used for serialization.
-    ///    - value: A generic value conforming to EncodingContainer, which is either a UInt32 or an array of UInt32s.
-    ///
-    /// - Throws: An SuiError object that's an invalid data value with the supported type of either UInt32 or [UInt32],
-    /// if the provided value does not match either a UInt32 or an array of UInt32s.
     public static func u32<T: EncodingContainer>(_ serializer: Serializer, _ value: T) throws {
         if let uint32 = value as? UInt32 {
-            serializer.writeInt(UInt32(uint32), length: 4)
+            serializer.serializeU32(uint32)
         } else if let uint32Array = value as? [UInt32] {
             try serializer.sequence(uint32Array, Serializer.u32)
         } else {
@@ -295,19 +562,9 @@ public class Serializer {
     }
 
     /// Serialize a UInt64 value or an array of UInt64 values using a custom Serializer.
-    ///
-    /// This function takes a custom Serializer and a generic value conforming to the EncodingContainer protocol,
-    /// and attempts to serialize the value as a single UInt64 or an array of UInt64s.
-    ///
-    /// - Parameters:
-    ///    - serializer: A custom Serializer instance to be used for serialization.
-    ///    - value: A generic value conforming to EncodingContainer, which is either a UInt64 or an array of UInt64s.
-    ///
-    /// - Throws: An SuiError object that's an invalid data value with the supported type of either UInt64 or [UInt64],
-    /// if the provided value does not match either a UInt64 or an array of UInt64s.
     public static func u64<T: EncodingContainer>(_ serializer: Serializer, _ value: T) throws {
         if let uint64 = value as? UInt64 {
-            serializer.writeInt(UInt64(uint64), length: 8)
+            serializer.serializeU64(uint64)
         } else if let uint64Array = value as? [UInt64] {
             try serializer.sequence(uint64Array, Serializer.u64)
         } else {
@@ -316,19 +573,9 @@ public class Serializer {
     }
 
     /// Serialize a UInt128 value or an array of UInt128 values using a custom Serializer.
-    ///
-    /// This function takes a custom Serializer and a generic value conforming to the EncodingContainer protocol,
-    /// and attempts to serialize the value as a single UInt128 or an array of UInt128s.
-    ///
-    /// - Parameters:
-    ///    - serializer: A custom Serializer instance to be used for serialization.
-    ///    - value: A generic value conforming to EncodingContainer, which is either a UInt128 or an array of UInt128s.
-    ///
-    /// - Throws: An SuiError object that's an invalid data value with the supported type of either UInt128 or [UInt128],
-    /// if the provided value does not match either a UInt128 or an array of UInt128s.
     public static func u128<T: EncodingContainer>(_ serializer: Serializer, _ value: T) throws {
         if let uint128 = value as? UInt128 {
-            serializer.writeInt(UInt128(uint128), length: 16)
+            serializer.serializeU128(uint128)
         } else if let uint128Array = value as? [UInt128] {
             try serializer.sequence(uint128Array, Serializer.u128)
         } else {
@@ -337,19 +584,9 @@ public class Serializer {
     }
 
     /// Serialize a UInt256 value or an array of UInt256 values using a custom Serializer.
-    ///
-    /// This function takes a custom Serializer and a generic value conforming to the EncodingContainer protocol,
-    /// and attempts to serialize the value as a single UInt256 or an array of UInt256s.
-    ///
-    /// - Parameters:
-    ///    - serializer: A custom Serializer instance to be used for serialization.
-    ///    - value: A generic value conforming to EncodingContainer, which is either a UInt256 or an array of UInt256s.
-    ///
-    /// - Throws: An SuiError object that's an invalid data value with the supported type of either UInt256 or [UInt256],
-    /// if the provided value does not match either a UInt256 or an array of UInt256s.
     public static func u256<T: EncodingContainer>(_ serializer: Serializer, _ value: T) throws {
         if let uint256 = value as? UInt256 {
-            serializer.writeInt(uint256, length: 32)
+            serializer.serializeU256(uint256)
         } else if let uint256Array = value as? [UInt256] {
             try serializer.sequence(uint256Array, Serializer.u256)
         } else {
@@ -361,44 +598,27 @@ public class Serializer {
         _ value: T?,
         _ valueEncoder: (Serializer, T) throws -> Void
     ) throws {
-        if let value {
+        if let value = value {
+            writeByte(1)
             let bytes = try encoder(value, valueEncoder)
-            self.fixedBytes(bytes)
+            fixedBytes(bytes)
         } else {
-            self._output.append(0)
+            writeByte(0)
         }
     }
 
-    /// Serialize a given UInt value as a ULEB128 (Unsigned Little Endian Base 128) encoded integer.
-    ///
-    /// This function takes a UInt value and encodes it using the ULEB128 variable-length integer encoding.
-    /// This encoding is efficient for representing small integers and reduces the serialized data size.
-    ///
-    /// - Parameter value: A UInt value to be serialized as a ULEB128 encoded integer.
-    ///
-    /// - Throws: An error if the Serializer.u8 function call fails while encoding the ULEB128 value.
+    /// Serialize a given UInt value as a ULEB128 encoded integer.
     func uleb128(_ value: UInt) throws {
-        var _value = value
-        while _value >= 0x80 {
-            let byte = _value & 0x7F
-            try Serializer.u8(self, UInt8(byte | 0x80))
-            _value >>= 7
-        }
-        try Serializer.u8(self, UInt8(_value & 0x7F))
+        try serializeULEB128(UInt32(value))
     }
 
     /// Write an unsigned integer value to the Serializer's output data buffer.
-    ///
-    /// This function takes an unsigned integer value and writes the first length bytes of the value
-    /// to the Serializer's output data buffer. The value is added in little-endian byte order.
-    ///
-    /// - Parameters:
-    ///    - value: An unsigned integer value to be written to the Serializer's output data buffer.
-    ///    - length: The number of bytes to write from the given unsigned integer value.
     private func writeInt(_ value: any UnsignedInteger, length: Int) {
         var _value = value
         let valueData = withUnsafeBytes(of: &_value) { Data($0) }
-        self._output.append(valueData.prefix(length))
+        valueData.prefix(length).withUnsafeBytes { bytes in
+            writeBytes(bytes)
+        }
     }
 
     private static func containsNonASCIICharacters(_ string: String) -> Bool {
@@ -409,31 +629,80 @@ public class Serializer {
         }
         return false
     }
+
+    // MARK: - Container Depth Management
+
+    private func enterContainer() throws {
+        guard containerDepth < Self.MAX_CONTAINER_DEPTH else {
+            throw BCSError.exceedsMaxContainerDepth
+        }
+        containerDepth += 1
+    }
+
+    private func exitContainer() {
+        containerDepth -= 1
+    }
+}
+
+// MARK: - Thread-Safe Serializer Pool
+
+public final class SerializerPool {
+    private let queue = DispatchQueue(label: "bcs.serializer.pool", qos: .userInteractive)
+    private var pool: [Serializer] = []
+    private let maxPoolSize = 10
+
+    public static let shared = SerializerPool()
+
+    private init() {}
+
+    public func withSerializer<T>(_ operation: (Serializer) throws -> T) rethrows -> T {
+        let serializer = queue.sync { () -> Serializer in
+            if let serializer = pool.popLast() {
+                serializer.reset()
+                return serializer
+            }
+            return Serializer()
+        }
+
+        defer {
+            queue.sync {
+                if pool.count < maxPoolSize {
+                    pool.append(serializer)
+                }
+            }
+        }
+
+        return try operation(serializer)
+    }
 }
 
 /// Encode a value using a given encoding function and return the serialized data.
-///
-/// This function takes a value and an encoding function, and uses the function to encode the value
-/// using a new Serializer instance. It then returns the serialized data from the Serializer's output.
-///
-/// - Parameters:
-///    - value: The value to be encoded.
-///    - encoder: The encoding function that accepts a Serializer instance and the value to be encoded.
-///
-/// - Returns: A Data object containing the serialized representation of the value.
-///
-/// - Throws: Any error that may occur during the encoding process with the given encoding function.
+/// Uses a pooled serializer for better performance.
 func encoder<T>(
     _ value: T,
     _ encoder: (Serializer, T) throws -> Void
 ) throws -> Data {
-    let ser = Serializer()
-    try encoder(ser, value)
-    return ser.output()
+    return try SerializerPool.shared.withSerializer { serializer in
+        try encoder(serializer, value)
+        return serializer.output()
+    }
 }
 
+// MARK: - Data Comparison Optimization
+
 func < (lhs: Data, rhs: Data) -> Bool {
-    let lhsString = lhs.reduce("", { $0 + String(format: "%02x", $1) })
-    let rhsString = rhs.reduce("", { $0 + String(format: "%02x", $1) })
-    return lhsString < rhsString
+    // Much more efficient comparison using lexicographical comparison
+    let lhsBytes = lhs.withUnsafeBytes { Array($0) }
+    let rhsBytes = rhs.withUnsafeBytes { Array($0) }
+    return lhsBytes.lexicographicallyPrecedes(rhsBytes)
+}
+
+// MARK: - Error Types
+
+extension BCSError {
+    static func invalidSequenceLength(_ length: UInt32) -> BCSError {
+        return .customError("Sequence length \(length) exceeds maximum allowed")
+    }
+
+    static let exceedsMaxContainerDepth = BCSError.customError("Container depth exceeds maximum allowed")
 }

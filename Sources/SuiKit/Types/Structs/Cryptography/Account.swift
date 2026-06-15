@@ -27,7 +27,7 @@ import Foundation
 import CryptoKit
 
 /// Sui Blockchain Account
-public struct Account: Equatable, Hashable {
+public struct Account: Equatable, Hashable, Sendable {
     /// Represents the type of cryptographic key associated with the account.
     /// For example, it could be `ed25519`, `secp256k1`, or `secp256r1`.
     public let accountType: KeyType
@@ -53,7 +53,7 @@ public struct Account: Equatable, Hashable {
             let privateKey = try SECP256K1PrivateKey()
             try self.init(privateKey: privateKey, accountType: accountType)
         case .secp256r1:
-            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+            if #available(macOS 13.0, iOS 15.0, tvOS 16.0, watchOS 9.0, *) {
                 let privateKey = try SECP256R1PrivateKey(hasBiometrics: hasBiometrics)
                 try self.init(privateKey: privateKey, accountType: accountType)
             } else {
@@ -80,7 +80,7 @@ public struct Account: Equatable, Hashable {
             let privateKey = try SECP256K1PrivateKey(key: privateKey)
             try self.init(privateKey: privateKey, accountType: accountType)
         case .secp256r1:
-            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+            if #available(macOS 13.0, iOS 15.0, tvOS 16.0, watchOS 9.0, *) {
                 let privateKey = try SECP256R1PrivateKey(key: privateKey)
                 try self.init(privateKey: privateKey, accountType: accountType)
             } else {
@@ -142,7 +142,7 @@ public struct Account: Equatable, Hashable {
             self.publicKey = try privateKey.publicKey()
             self.accountType = keyType
         case .secp256r1:
-            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+            if #available(macOS 13.0, iOS 15.0, tvOS 16.0, watchOS 9.0, *) {
                 let privateKey = try SECP256R1PrivateKey(hexString: hexString)
                 self.privateKey = privateKey
                 self.publicKey = try privateKey.publicKey()
@@ -198,7 +198,7 @@ public struct Account: Equatable, Hashable {
             self.privateKey = privateKey
             self.publicKey = try privateKey.publicKey()
         case .secp256r1:
-            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+            if #available(macOS 13.0, iOS 15.0, tvOS 16.0, watchOS 9.0, *) {
                 let privateKey = try SECP256R1PrivateKey(mnemonic)
                 self.privateKey = privateKey
                 self.publicKey = try privateKey.publicKey()
@@ -227,7 +227,7 @@ public struct Account: Equatable, Hashable {
             self.privateKey = privateKey
             self.publicKey = try privateKey.publicKey()
         case .secp256r1:
-            if #available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *) {
+            if #available(macOS 13.0, iOS 15.0, tvOS 16.0, watchOS 9.0, *) {
                 let privateKey = try SECP256R1PrivateKey(value: value)
                 self.privateKey = privateKey
                 self.publicKey = try privateKey.publicKey()
@@ -248,7 +248,7 @@ public struct Account: Equatable, Hashable {
             }
             if lhs.privateKey.key.getType() == .p256 {
                 return
-                    (lhs.privateKey.key as! SecureEnclave.P256.Signing.PrivateKey) == (rhs.privateKey.key as! SecureEnclave.P256.Signing.PrivateKey) &&
+                    (lhs.privateKey.key as! P256PrivateKeyStorage) == (rhs.privateKey.key as! P256PrivateKeyStorage) &&
                     (lhs.publicKey.key as! P256.Signing.PublicKey) == (rhs.publicKey.key as! P256.Signing.PublicKey)
             }
         }
@@ -427,10 +427,18 @@ public struct Account: Equatable, Hashable {
             )
         }
         if self.privateKey.key.getType() == .p256 {
-            return ExportedAccount(
-                schema: self.accountType,
-                privateKey: "\((privateKey.key as! SecureEnclave.P256.Signing.PrivateKey).rawRepresentation.base64EncodedString())"
-            )
+            switch (self.privateKey.key as! P256PrivateKeyStorage) {
+            case .secureEnclave(let key):
+                return ExportedAccount(
+                    schema: self.accountType,
+                    privateKey: "\(key.dataRepresentation.base64EncodedString())"
+                )
+            case .software(let key):
+                return ExportedAccount(
+                    schema: self.accountType,
+                    privateKey: "\(key.rawRepresentation.base64EncodedString())"
+                )
+            }
         }
         throw AccountError.cannotBeExported
     }

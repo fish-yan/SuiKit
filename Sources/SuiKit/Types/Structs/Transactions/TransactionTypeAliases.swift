@@ -24,7 +24,6 @@
 //
 
 import Foundation
-@preconcurrency import AnyCodable
 
 public typealias EpochId = String
 public typealias SequenceNumber = String
@@ -34,5 +33,5 @@ public typealias TransactionEventDigest = String
 public typealias ReturnValueType = ([UInt8], SuiMoveNormalizedStructType)
 public typealias TransactionEvents = [SuiEvent]
 public typealias MutableReferenceOutputType = (SuiMoveNormalizedStructType, [UInt8], String)
-public typealias EmptySignInfo = [String: AnyCodable]
+public typealias EmptySignInfo = [String: SuiJSON]
 public typealias AuthorityName = String

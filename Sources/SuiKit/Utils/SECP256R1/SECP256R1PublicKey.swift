@@ -28,7 +28,7 @@ import CryptoKit
 import Blake2
 import Security
 
-@available(macOS 13.0, iOS 16.0, tvOS 16.0, watchOS 9.0, *)
+@available(macOS 13.0, iOS 15.0, tvOS 16.0, watchOS 9.0, *)
 public struct SECP256R1PublicKey: PublicKeyProtocol {
     public static let LENGTH: Int = 33
 
@@ -41,7 +41,7 @@ public struct SECP256R1PublicKey: PublicKeyProtocol {
     }
 
     public init(data: Data) throws {
-        if let key = try? P256.Signing.PublicKey(compressedRepresentation: data) {
+        if let key = try? P256.Signing.PublicKey(compressedRepresentationForIOS15: data) {
             self.key = key
         } else {
             throw AccountError.invalidData
@@ -72,11 +72,11 @@ public struct SECP256R1PublicKey: PublicKeyProtocol {
     }
 
     public func base64() -> String {
-        return self.key.compressedRepresentation.base64EncodedString()
+        return self.key.compressedRepresentationForIOS15.base64EncodedString()
     }
 
     public func hex() -> String {
-        return "0x\(self.key.compressedRepresentation.hexEncodedString())"
+        return "0x\(self.key.compressedRepresentationForIOS15.hexEncodedString())"
     }
 
     public func toSuiAddress() throws -> String {
@@ -100,7 +100,7 @@ public struct SECP256R1PublicKey: PublicKeyProtocol {
     /// - Throws: If any error occurs during conversion.
     /// - Returns: An array of bytes representing the Sui public key.
     public func toSuiBytes() throws -> [UInt8] {
-        let rawBytes = self.key.compressedRepresentation
+        let rawBytes = self.key.compressedRepresentationForIOS15
         var suiBytes = Data(count: rawBytes.count + 1)
         try suiBytes.set([SignatureSchemeFlags.SIGNATURE_SCHEME_TO_FLAG["SECP256R1"]!])
         try suiBytes.set([UInt8](rawBytes), offset: 1)
@@ -109,7 +109,7 @@ public struct SECP256R1PublicKey: PublicKeyProtocol {
     }
 
     public func toSerializedSignature(signature: Signature) throws -> String {
-        let rawBytes = self.key.compressedRepresentation
+        let rawBytes = self.key.compressedRepresentationForIOS15
         var serializedSignature = Data(count: signature.signature.count + rawBytes.count)
         serializedSignature[0] = SignatureSchemeFlags.SIGNATURE_SCHEME_TO_FLAG["SECP256R1"]!
         serializedSignature[1..<signature.signature.count] = signature.signature
@@ -144,6 +144,6 @@ public struct SECP256R1PublicKey: PublicKeyProtocol {
     }
 
     public func serialize(_ serializer: Serializer) throws {
-        try Serializer.toBytes(serializer, self.key.compressedRepresentation)
+        try Serializer.toBytes(serializer, self.key.compressedRepresentationForIOS15)
     }
 }

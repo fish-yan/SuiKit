@@ -78,7 +78,7 @@ final class ObjectDisplayStandardTest: XCTestCase {
         XCTAssertEqual("https://get-a-boar.fullurl.com/", display["full_url"])
         XCTAssertEqual("{name}", display["escape_syntax"])
 
-        let error = "Field value idd cannot be found in struct; Field value namee cannot be found in struct"
+        let error = "\'namee\' not found in object; \'idd\' not found in object"
 
         XCTAssertEqual(displayFull.error, .displayError(error: error))
     }

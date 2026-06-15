@@ -31,7 +31,7 @@ import Foundation
  * purchase, manage transfer policies, create new kiosks etc.
  * If you pass packageIds, all functionality will be managed using these packages.
  */
-@available(iOS 16.0, *)
+@available(iOS 15.0, *)
 public class KioskClient {
     let client: SuiProvider
     let network: KioskNetwork

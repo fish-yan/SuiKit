@@ -24,7 +24,6 @@
 //
 
 import Foundation
-@preconcurrency import AnyCodable
 
 public typealias HttpHeaders = [String: String]
-public typealias RequestParamsLike = [AnyCodable]
+public typealias RequestParamsLike = [SuiJSON]

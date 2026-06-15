@@ -25,9 +25,8 @@
 
 import Foundation
 import UInt256
-@preconcurrency import AnyCodable
 
-public protocol EncodingProtocol: EncodingContainer { }
+public protocol EncodingProtocol: EncodingContainer, Sendable { }
 
 extension UInt8: EncodingProtocol { }
 extension UInt16: EncodingProtocol { }

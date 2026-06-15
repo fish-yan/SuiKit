@@ -29,7 +29,7 @@ import CryptoKit
 import BigInt
 @testable import SuiKit
 
-@available(iOS 16.0, tvOS 16.0, watchOS 9.0, *)
+@available(iOS 15.0, tvOS 16.0, watchOS 9.0, *)
 final class SECP256R1WalletTest: XCTestCase {
     let validSecp256r1SecretKey: [UInt8] = [
         66, 37, 141, 205, 161, 76, 241, 17, 198, 2, 184, 151, 27, 140, 200, 67, 233, 30, 70, 202, 144, 81, 81, 192, 39, 68, 166, 176, 23, 230, 147, 22
@@ -64,7 +64,7 @@ final class SECP256R1WalletTest: XCTestCase {
 
     func testThatSecp256r1PrivateKeysCanBeInitialized() throws {
         let account = try Account(accountType: .secp256r1)
-        XCTAssertEqual((account.publicKey.key as! P256.Signing.PublicKey).compressedRepresentation.count, 33)
+        XCTAssertEqual((account.publicKey.key as! P256.Signing.PublicKey).compressedRepresentationForIOS15.count, 33)
     }
 
     func testThatSecp256r1PrivateKeyCanBeInitializedFromBytes() throws {
@@ -78,7 +78,7 @@ final class SECP256R1WalletTest: XCTestCase {
             accountType: .secp256r1
         )
 
-        XCTAssertEqual((account.publicKey.key as! P256.Signing.PublicKey).compressedRepresentation, publicKey.key.compressedRepresentation)
+        XCTAssertEqual((account.publicKey.key as! P256.Signing.PublicKey).compressedRepresentationForIOS15, publicKey.key.compressedRepresentationForIOS15)
         XCTAssertEqual(account.publicKey.base64(), pubKeyBase64)
     }
 

@@ -26,7 +26,7 @@
 import Foundation
 import SwiftyJSON
 
-@available(iOS 16.0, *)
+@available(iOS 15.0, *)
 public struct KioskQuery {
     public static func fetchKiosk(
         client: SuiProvider,

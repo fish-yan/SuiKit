@@ -25,7 +25,7 @@
 
 import Foundation
 
-@available(iOS 16.0, *)
+@available(iOS 15.0, *)
 public class TransferPolicyTransactionClient {
     public var transactionBlock: TransactionBlock
     public var kioskClient: KioskClient

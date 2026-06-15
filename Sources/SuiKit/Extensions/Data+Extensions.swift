@@ -2,6 +2,11 @@ import Foundation
 import CommonCrypto
 
 extension Data {
+    /// Returns the contents of the Data as an array of UInt8
+    public var bytes: [UInt8] {
+        return [UInt8](self)
+    }
+
     /// Converts data to a hexadecimal string representation
     /// - Parameter uppercase: Whether the hex string should use uppercase characters
     /// - Returns: A hexadecimal string representation of the data
@@ -173,3 +178,4 @@ public func CC_SHA256(_ data: UnsafeRawPointer?, _ len: CCLong, _ md: UnsafeMuta
 public let CC_SHA256_DIGEST_LENGTH: Int = 32
 public typealias CCLong = UInt32
 #endif
+

@@ -29,7 +29,7 @@ import CryptoKit
 import BigInt
 @testable import SuiKit
 
-@available(iOS 16.0, tvOS 16.0, watchOS 9.0, *)
+@available(iOS 15.0, tvOS 16.0, watchOS 9.0, *)
 final class SECP256R1PublicKeyTest: XCTestCase {
     struct PublicKeyTestStructure {
         let rawPublicKey: String
@@ -87,8 +87,8 @@ final class SECP256R1PublicKeyTest: XCTestCase {
         let publicKey = try SECP256R1PublicKey(value: pubKeyBase64)
 
         XCTAssertEqual(publicKey.base64(), pubKeyBase64)
-        XCTAssertEqual(publicKey.key.compressedRepresentation.count, 33)
-        XCTAssertEqual(try SECP256R1PublicKey(data: publicKey.key.compressedRepresentation), publicKey)
+        XCTAssertEqual(publicKey.key.compressedRepresentationForIOS15.count, 33)
+        XCTAssertEqual(try SECP256R1PublicKey(data: publicKey.key.compressedRepresentationForIOS15), publicKey)
     }
 
     func testThatSuiAddressDerivationWorksAsIntended() throws {

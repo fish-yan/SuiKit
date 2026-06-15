@@ -26,7 +26,7 @@
 import Foundation
 
 /// An enum representing the possible types of values.
-public enum ValueType {
+public enum ValueType: Sendable {
     /// Represents a pure value (e.g., `UInt8` array).
     case pure
 

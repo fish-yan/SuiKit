@@ -25,7 +25,7 @@
 
 import Foundation
 
-@available(iOS 16.0, *)
+@available(iOS 15.0, *)
 public struct TransferPolicyQuery {
     /// Searches the `TransferPolicy`-s for the given type. The seach is performed via
     /// the `TransferPolicyCreated` event. The policy can either be owned or shared,

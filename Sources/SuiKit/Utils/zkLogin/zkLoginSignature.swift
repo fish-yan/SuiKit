@@ -166,7 +166,7 @@ public struct zkLoginSignature: KeyProtocol, Equatable {
 }
 
 /// Default implementation of GraphQLClient
-public class SuiGraphQLClient: GraphQLClientProtocol {
+public final class SuiGraphQLClient: GraphQLClientProtocol {
     private let url: URL
     private let session: URLSession
 

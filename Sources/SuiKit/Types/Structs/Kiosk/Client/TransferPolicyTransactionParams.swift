@@ -25,7 +25,7 @@
 
 import Foundation
 
-@available(iOS 16.0, *)
+@available(iOS 15.0, *)
 public struct TransferPolicyTransactionParams {
     public var kioskClient: KioskClient
     public var cap: TransferPolicyCap?

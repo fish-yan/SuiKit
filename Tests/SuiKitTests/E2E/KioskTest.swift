@@ -27,7 +27,7 @@ import Foundation
 import XCTest
 @testable import SuiKit
 
-@available(iOS 16.0, *)
+@available(iOS 15.0, *)
 final class KioskTest: XCTestCase {
     var toolBox: TestToolbox?
     var kioskToolbox: KioskToolbox?

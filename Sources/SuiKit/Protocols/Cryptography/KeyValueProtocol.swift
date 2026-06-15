@@ -55,20 +55,6 @@ extension P256.Signing.PublicKey: KeyValueProtocol, @retroactive Hashable {
 
     public func getType() -> DataType { return .p256 }
 }
-
-/// Represents a `P256`private key.
-extension SecureEnclave.P256.Signing.PrivateKey: @retroactive Equatable {}
-extension SecureEnclave.P256.Signing.PrivateKey: KeyValueProtocol, @retroactive Hashable {
-    public static func == (lhs: SecureEnclave.P256.Signing.PrivateKey, rhs: SecureEnclave.P256.Signing.PrivateKey) -> Bool {
-        return lhs.dataRepresentation == rhs.dataRepresentation
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(self.hashValue)
-    }
-
-    public func getType() -> DataType { return .p256 }
-}
 #else
 /// Represents a `P256`public key.
 extension P256.Signing.PublicKey: Equatable {}
@@ -83,18 +69,41 @@ extension P256.Signing.PublicKey: KeyValueProtocol, Hashable {
 
     public func getType() -> DataType { return .p256 }
 }
+#endif
 
-/// Represents a `P256`private key.
-extension SecureEnclave.P256.Signing.PrivateKey: Equatable {}
-extension SecureEnclave.P256.Signing.PrivateKey: KeyValueProtocol, Hashable {
-    public static func == (lhs: SecureEnclave.P256.Signing.PrivateKey, rhs: SecureEnclave.P256.Signing.PrivateKey) -> Bool {
-        return lhs.dataRepresentation == rhs.dataRepresentation
+/// Support two types of private key storage:
+/// - `secureEnclave`: Keys stored securely in the device's Secure Enclave (hardware-backed).
+/// - `software`: Keys stored in software, using CryptoKit's P256 implementation.
+///
+/// Secure Enclave keys cannot be initialized from arbitrary raw private key bytes,
+/// so when initializing from raw data, the software implementation is used.
+public enum P256PrivateKeyStorage: Sendable {
+    case secureEnclave(SecureEnclave.P256.Signing.PrivateKey)
+    case software(CryptoKit.P256.Signing.PrivateKey)
+}
+
+extension P256PrivateKeyStorage: Equatable {
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case let (.secureEnclave(a), .secureEnclave(b)):
+            return a.dataRepresentation == b.dataRepresentation
+
+        case let (.software(a), .software(b)):
+            return a.rawRepresentation == b.rawRepresentation
+
+        // Different storage backends are not considered equal
+        default:
+            return false
+        }
+    }
+}
+
+extension P256PrivateKeyStorage: KeyValueProtocol, Hashable {
+    public func getType() -> DataType {
+        return .p256
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(self.hashValue)
     }
-
-    public func getType() -> DataType { return .p256 }
 }
-#endif
