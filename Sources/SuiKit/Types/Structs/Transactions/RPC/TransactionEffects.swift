@@ -75,6 +75,42 @@ public struct TransactionEffects {
     /// An optional array representing the dependencies of the transaction.
     public var dependencies: [TransactionDigest]?
 
+    public init(
+        messageVersion: MessageVersion,
+        status: ExecutionStatus,
+        executedEpoch: EpochId,
+        modifiedAtVersions: [TransactionEffectsModifiedAtVersions]? = nil,
+        gasUsed: GasCostSummary,
+        sharedObjects: [SuiObjectRef]? = nil,
+        transactionDigest: TransactionDigest,
+        created: [OwnedObjectRef]? = nil,
+        mutated: [OwnedObjectRef]? = nil,
+        unwrapped: [OwnedObjectRef]? = nil,
+        deleted: [SuiObjectRef]? = nil,
+        unwrappedThenDeleted: [SuiObjectRef]? = nil,
+        wrapped: [SuiObjectRef]? = nil,
+        gasObject: OwnedObjectRef,
+        eventsDigest: TransactionEventDigest? = nil,
+        dependencies: [TransactionDigest]? = nil
+    ) {
+        self.messageVersion = messageVersion
+        self.status = status
+        self.executedEpoch = executedEpoch
+        self.modifiedAtVersions = modifiedAtVersions
+        self.gasUsed = gasUsed
+        self.sharedObjects = sharedObjects
+        self.transactionDigest = transactionDigest
+        self.created = created
+        self.mutated = mutated
+        self.unwrapped = unwrapped
+        self.deleted = deleted
+        self.unwrappedThenDeleted = unwrappedThenDeleted
+        self.wrapped = wrapped
+        self.gasObject = gasObject
+        self.eventsDigest = eventsDigest
+        self.dependencies = dependencies
+    }
+
     public init?(input: JSON) {
         guard let messageVersion = MessageVersion.fromJSON(input["messageVersion"]) else { return nil }
         guard let status = ExecutionStatus(input: input["status"]) else { return nil }

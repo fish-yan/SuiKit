@@ -42,6 +42,18 @@ public struct DevInspectResults {
     /// An array of `SuiEvent` representing the events that occurred during the inspection.
     public var events: [SuiEvent]
 
+    public init(
+        effects: TransactionEffects,
+        results: [ExecutionResultType]?,
+        error: String?,
+        events: [SuiEvent]
+    ) {
+        self.effects = effects
+        self.results = results
+        self.error = error
+        self.events = events
+    }
+
     public init?(input: JSON) {
         guard let effects = TransactionEffects(input: input["effects"]) else { return nil }
         self.effects = effects

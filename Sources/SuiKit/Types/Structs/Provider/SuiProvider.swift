@@ -1,5 +1,5 @@
 //
-//  SuiProvider.swift
+//  Provider.swift
 //  SuiKit
 //
 //  Copyright (c) 2024-2025 OpenDive
@@ -29,7 +29,7 @@ import Blake2
 import BigInt
 
 /// The RPC Provider used to interact with the Sui blockchain.
-public struct SuiProvider {
+public struct SuiProvider: Provider {
     /// A property representing the connection to a provider that conforms to the `ConnectionProtocol`.
     /// This connection is used to interact with the Sui network, allowing for the execution of various
     /// network-related tasks such as fetching data, sending requests, etc.

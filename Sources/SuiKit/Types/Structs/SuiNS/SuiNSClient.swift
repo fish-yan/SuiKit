@@ -27,12 +27,12 @@ import SwiftyJSON
 import Foundation
 
 public class SuiNSClient {
-    private let suiClient: SuiProvider
+    private let suiClient: Provider
     public var contractObject: SuiNSContract?
     public var networkType: NetworkType?
 
     public init(
-        suiClient: SuiProvider,
+        suiClient: Provider,
         contractObject: SuiNSContract? = nil,
         networkType: NetworkType? = nil
     ) {

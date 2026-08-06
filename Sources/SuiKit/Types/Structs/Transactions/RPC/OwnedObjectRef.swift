@@ -34,6 +34,11 @@ public struct OwnedObjectRef {
     /// A `SuiObjectRef` type representing a reference to the Sui Object.
     public let reference: SuiObjectRef
 
+    public init(owner: ObjectOwner, reference: SuiObjectRef) {
+        self.owner = owner
+        self.reference = reference
+    }
+
     public init?(input: JSON) {
         guard let owner = ObjectOwner.parseJSON(input["owner"]) else { return nil }
         self.owner = owner

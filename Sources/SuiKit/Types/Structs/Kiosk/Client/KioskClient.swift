@@ -33,13 +33,13 @@ import Foundation
  */
 @available(iOS 15.0, *)
 public class KioskClient {
-    let client: SuiProvider
+    let client: Provider
     let network: KioskNetwork
     let rules: [TransferPolicyRule]
     let packageIds: BaseRulePackageIds?
 
     public init(
-        client: SuiProvider,
+        client: Provider,
         network: KioskNetwork,
         rules: [TransferPolicyRule] = [],
         packageIds: BaseRulePackageIds? = nil

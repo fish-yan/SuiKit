@@ -28,7 +28,7 @@ import Foundation
 public struct SuiNSQueries {
     /// Get NFT's owner from RPC.
     public static func getOwner(
-        client: SuiProvider,
+        client: Provider,
         nftId: String
     ) async throws -> String? {
         let ownerResponse = try await client.getObject(
@@ -52,7 +52,7 @@ public struct SuiNSQueries {
 
     /// Get avatar NFT Object from RPC.
     public static func getAvatar(
-        client: SuiProvider,
+        client: Provider,
         avatar: String
     ) async throws -> SuiObjectResponse? {
         return try await client.getObject(

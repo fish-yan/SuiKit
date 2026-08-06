@@ -39,6 +39,14 @@ public struct ExecutionResultType {
     /// values produced during the execution.
     public var returnValues: [ReturnValueType]?
 
+    public init(
+        mutableReferenceOutputs: [MutableReferenceOutputType]?,
+        returnValues: [ReturnValueType]?
+    ) {
+        self.mutableReferenceOutputs = mutableReferenceOutputs
+        self.returnValues = returnValues
+    }
+
     public init?(input: JSON) {
         self.returnValues = []
         self.mutableReferenceOutputs = []

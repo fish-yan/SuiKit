@@ -45,6 +45,18 @@ public struct GasCostSummary: Equatable {
     /// This refers to the portion of the storage cost that cannot be recovered or refunded.
     public let nonRefundableStorageFee: String
 
+    public init(
+        computationCost: String,
+        storageCost: String,
+        storageRebate: String,
+        nonRefundableStorageFee: String
+    ) {
+        self.computationCost = computationCost
+        self.storageCost = storageCost
+        self.storageRebate = storageRebate
+        self.nonRefundableStorageFee = nonRefundableStorageFee
+    }
+
     /// Initialize a new instance of `GasCostSummary` from a GraphQL object.
     /// - Parameter graphql: A GraphQL object containing values for initalizing a new Checkpoint.
     public init(graphql: RPC_Checkpoint_Fields.RollingGasSummary) {

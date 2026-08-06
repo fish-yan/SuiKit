@@ -33,6 +33,9 @@ public enum MessageVersion: String {
     /// Represents version 1 of the message.
     case v1
 
+    /// Represents transaction effects version 2 returned by the current GraphQL API.
+    case v2
+
     /// Creates a `MessageVersion` from a JSON object.
     ///
     /// - Parameters:
@@ -42,6 +45,8 @@ public enum MessageVersion: String {
         switch input.stringValue {
         case "v1":
             return .v1
+        case "v2":
+            return .v2
         default:
             return nil
         }

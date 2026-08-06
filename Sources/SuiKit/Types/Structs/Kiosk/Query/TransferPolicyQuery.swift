@@ -32,13 +32,16 @@ public struct TransferPolicyQuery {
     /// and the caller needs to filter the results accordingly (ie single owner can not
     /// be accessed by anyone but the owner).
     public static func queryTransferPolicy(
-        client: SuiProvider,
+        client: Provider,
         type: String
     ) async throws -> [TransferPolicy] {
         let data = try await client.queryEvents(
             query: SuiEventFilter.moveEventType(
                 "\(TransferPolicyConstants.transferPolicyCreatedEvent)<\(type)>"
-            )
+            ),
+            cursor: nil,
+            limit: nil,
+            order: nil
         ).data
         let search = data.map {
             $0.parsedJson["id"].stringValue
@@ -76,7 +79,7 @@ public struct TransferPolicyQuery {
     /// Extra options allow pagination.
     /// - Returns: TransferPolicyCap Object ID array, empty if not found.
     public static func queryTransferPolicyCapsByType(
-        client: SuiProvider,
+        client: Provider,
         address: String,
         type: String
     ) async throws -> [TransferPolicyCap] {
@@ -108,7 +111,7 @@ public struct TransferPolicyQuery {
     /// Extra options allow pagination.
     /// - Returns: TransferPolicyCap Object ID array, empty if not found.
     public static func queryOwnedTransferPolicies(
-        client: SuiProvider,
+        client: Provider,
         address: String
     ) async throws -> [TransferPolicyCap] {
         guard address.isValidSuiAddress() else { throw SuiError.customError(

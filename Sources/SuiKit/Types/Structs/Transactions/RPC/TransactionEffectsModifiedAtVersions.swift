@@ -33,6 +33,11 @@ public struct TransactionEffectsModifiedAtVersions {
     /// Represents the sequence number of the object.
     public let sequenceNumber: SequenceNumber
 
+    public init(objectId: ObjectId, sequenceNumber: SequenceNumber) {
+        self.objectId = objectId
+        self.sequenceNumber = sequenceNumber
+    }
+
     public init(input: JSON) {
         self.objectId = input["objectId"].stringValue
         self.sequenceNumber = input["sequenceNumber"].stringValue

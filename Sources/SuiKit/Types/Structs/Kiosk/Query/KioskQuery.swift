@@ -29,7 +29,7 @@ import SwiftyJSON
 @available(iOS 15.0, *)
 public struct KioskQuery {
     public static func fetchKiosk(
-        client: SuiProvider,
+        client: Provider,
         kioskId: String,
         cursor: String? = nil,
         limit: Int? = nil,
@@ -115,7 +115,7 @@ public struct KioskQuery {
     /// Returns a list of `kioskOwnerCapIds` and `kioskIds`.
     /// Extra options allow pagination.
     public static func getOwnedKiosks(
-        client: SuiProvider,
+        client: Provider,
         address: String,
         cursor: String? = nil,
         limit: Int? = nil,
@@ -173,7 +173,7 @@ public struct KioskQuery {
 
     /// Get a kiosk extension data for a given kioskId and extensionType.
     public static func fetchKioskExtension(
-        client: SuiProvider,
+        client: Provider,
         kioskId: String,
         extensionType: String
     ) async throws -> KioskExtension? {

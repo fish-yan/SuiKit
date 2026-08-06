@@ -31,8 +31,8 @@ import SwiftyJSON
 /// `RawSigner` is a struct that conforms to the `SignerWithProviderProtocol`.
 /// It provides mechanisms to interact with the Sui blockchain, sign data, and handle transaction blocks.
 public struct RawSigner: SignerWithProviderProtocol {
-    /// A `SuiProvider` instance, providing various blockchain-related services.
-    public var provider: SuiProvider
+    /// A `Provider` instance, providing various blockchain-related services.
+    public var provider: Provider
 
     /// An instance of `FaucetClient`, used for interacting with a blockchain faucet.
     public var faucetProvider: FaucetClient
@@ -40,7 +40,7 @@ public struct RawSigner: SignerWithProviderProtocol {
     /// Represents a user's blockchain account, containing public and private keys.
     public var account: Account
 
-    public init(account: Account, provider: SuiProvider) {
+    public init(account: Account, provider: Provider) {
         self.provider = provider
         self.faucetProvider = FaucetClient(connection: provider.connection)
         self.account = account

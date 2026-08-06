@@ -502,21 +502,21 @@ public class TransactionBlock {
 
     /// Builds a block with the specified provider and optional transaction kind.
     /// - Parameters:
-    ///   - provider: A `SuiProvider` representing the provider to build the block with.
+    ///   - provider: A `Provider` representing the provider to build the block with.
     ///   - onlyTransactionKind: An optional `Bool` representing whether only transaction kind should be considered while building.
     /// - Throws: Can throw an error if preparation or block building fails.
     /// - Returns: A `Data` object representing the built block.
-    public func build(_ provider: SuiProvider, _ onlyTransactionKind: Bool? = nil) async throws -> Data {
+    public func build(_ provider: Provider, _ onlyTransactionKind: Bool? = nil) async throws -> Data {
         try await self.prepare(BuildOptions(provider: provider, onlyTransactionKind: onlyTransactionKind))
         return try self.blockData.build(onlyTransactionKind: onlyTransactionKind)
     }
 
     /// Computes the digest of the block with the specified provider.
     /// - Parameters:
-    ///   - provider: A `SuiProvider` representing the provider to compute the digest with.
+    ///   - provider: A `Provider` representing the provider to compute the digest with.
     /// - Throws: Can throw an error if preparation or digest computation fails.
     /// - Returns: A `String` representing the digest of the block.
-    public func getDigest(_ provider: SuiProvider) async throws -> String {
+    public func getDigest(_ provider: Provider) async throws -> String {
         try await self.prepare(BuildOptions(provider: provider))
         return try self.blockData.getDigest()
     }
@@ -534,12 +534,12 @@ public class TransactionBlock {
 
     /// Prepares gas payment for transactions.
     /// - Parameters:
-    ///   - provider: A `SuiProvider` instance used to obtain necessary information to prepare gas payment.
+    ///   - provider: A `Provider` instance used to obtain necessary information to prepare gas payment.
     ///   - onlyTransactionKind: An optional `Bool`. If true, it prepares gas payment only for a specific kind of transaction.
     /// - Throws: Can throw `SuiError.senderIsMissing` if the sender is missing, `SuiError.gasOwnerCannotBeFound` if the gas owner cannot be found, and `SuiError.ownerDoesNotHavePaymentCoins` if the owner does not have payment coins.
     /// - Note: This method is asynchronous and can be awaited.
     private func prepareGasPayment(
-        provider: SuiProvider,
+        provider: Provider,
         onlyTransactionKind: Bool? = nil
     ) async throws {
         if isMissingSender(onlyTransactionKind) {
@@ -556,7 +556,9 @@ public class TransactionBlock {
 
         let coins = try await provider.getCoins(
             account: gasOwner,
-            coinType: "0x2::sui::SUI"
+            coinType: "0x2::sui::SUI",
+            cursor: nil,
+            limit: nil
         )
 
         let filteredCoins = coins.data.filter { coin in
@@ -588,12 +590,12 @@ public class TransactionBlock {
 
     /// Prepares gas price for transactions.
     /// - Parameters:
-    ///   - provider: A `SuiProvider` instance used to obtain necessary information to prepare gas price.
+    ///   - provider: A `Provider` instance used to obtain necessary information to prepare gas price.
     ///   - onlyTransactionKind: An optional `Bool`. If true, it prepares gas price only for a specific kind of transaction.
     /// - Throws: Can throw `SuiError.senderIsMissing` if the sender is missing.
     /// - Note: This method is asynchronous and can be awaited.
     private func prepareGasPrice(
-        provider: SuiProvider,
+        provider: Provider,
         onlyTransactionKind: Bool? = nil
     ) async throws {
         if self.isMissingSender(onlyTransactionKind) {
@@ -607,11 +609,11 @@ public class TransactionBlock {
     }
 
     /// Prepares transactions by resolving move modules and objects, and updating the block data builder with the resolved information.
-    /// - Parameter provider: A `SuiProvider` instance used to obtain necessary information to prepare transactions.
+    /// - Parameter provider: A `Provider` instance used to obtain necessary information to prepare transactions.
     /// - Throws: Various `SuiError` errors can be thrown based on different failure scenarios, such as `SuiError.moveCallSizeDoesNotMatch` 
     /// when move call size does not match, `SuiError.unknownCallArgType` when the call argument type is unknown, and `SuiError.inputValueIsNotObjectId`
     /// when the input value is not object ID, and `SuiError.objectIsInvalid` when an object is invalid.
-    private func prepareTransactions(provider: SuiProvider) async throws {
+    private func prepareTransactions(provider: Provider) async throws {
         // Retrieve the blockData from the builder property of the object
         let blockData = self.blockData.builder
 
@@ -852,7 +854,7 @@ public class TransactionBlock {
         }
 
         if options.protocolConfig == nil && options.limits == nil {
-            options.protocolConfig = try await provider.getProtocolConfig()
+            options.protocolConfig = try await provider.getProtocolConfig(version: nil)
         }
 
         try await self.prepareGasPrice(provider: provider, onlyTransactionKind: options.onlyTransactionKind ?? false)

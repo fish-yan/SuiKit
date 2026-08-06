@@ -59,6 +59,32 @@ public struct SuiTransactionBlockResponse {
     
     public let input: SuiTransactionBlockData?
 
+    public init(
+        digest: TransactionDigest,
+        transaction: SuiTransactionBlock? = nil,
+        effects: TransactionEffects? = nil,
+        events: TransactionEvents? = nil,
+        timestampMs: String? = nil,
+        checkpoint: String? = nil,
+        confirmedLocalExecution: Bool? = nil,
+        objectChanges: [SuiObjectChange]? = nil,
+        balanceChanges: [BalanceChange]? = nil,
+        errors: [String]? = nil,
+        input: SuiTransactionBlockData? = nil
+    ) {
+        self.digest = digest
+        self.transaction = transaction
+        self.effects = effects
+        self.events = events
+        self.timestampMs = timestampMs
+        self.checkpoint = checkpoint
+        self.confirmedLocalExecution = confirmedLocalExecution
+        self.objectChanges = objectChanges
+        self.balanceChanges = balanceChanges
+        self.errors = errors
+        self.input = input
+    }
+
     public init(input: JSON) {
         self.digest = input["digest"].stringValue
         self.transaction = SuiTransactionBlock(input: input["transaction"])

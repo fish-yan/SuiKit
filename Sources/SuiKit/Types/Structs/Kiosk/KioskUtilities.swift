@@ -30,7 +30,7 @@ public struct KioskUtilities {
     public static let defaultQueryLimit = 50
 
     public static func getKioskObject(
-        client: SuiProvider,
+        client: Provider,
         id: String
     ) async throws -> Kiosk {
         let queryRes = try await client.getObject(
@@ -178,7 +178,7 @@ public struct KioskUtilities {
      * RPC calls that allow filtering of Type / batch fetching of spec
      */
     public static func getAllDynamicFields(
-        client: SuiProvider,
+        client: Provider,
         parentId: String,
         cursorParam: String? = nil,
         limitParam: Int? = nil
@@ -190,6 +190,8 @@ public struct KioskUtilities {
         while hasNextPage {
             let result = try await client.getDynamicFields(
                 parentId: parentId,
+                filter: nil,
+                options: nil,
                 limit: limitParam,
                 cursor: cursor
             )
@@ -206,7 +208,7 @@ public struct KioskUtilities {
      * It will fetch all objects in the array, and limit it to 50/request.
      */
     public static func getAllObjects(
-        client: SuiProvider,
+        client: Provider,
         ids: [String],
         options: SuiObjectDataOptions = SuiObjectDataOptions(),
         limit: Int = Self.defaultQueryLimit
@@ -230,7 +232,7 @@ public struct KioskUtilities {
      * It parses all the pages and returns the data.
      */
     public static func getAllOwnedObjects(
-        client: SuiProvider,
+        client: Provider,
         owner: String,
         filter: SuiObjectDataFilter? = nil,
         options: SuiObjectDataOptions = SuiObjectDataOptions(showContent: true, showType: true),

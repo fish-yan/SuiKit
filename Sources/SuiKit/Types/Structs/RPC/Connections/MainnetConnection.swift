@@ -27,7 +27,7 @@ import Foundation
 
 public struct MainnetConnection: ConnectionProtocol {
     public var fullNode: String = "https://fullnode.mainnet.sui.io:443/"
-    public var graphql: String? = "https://graphql-beta.mainnet.sui.io"
+    public var graphql: String? = "https://graphql.mainnet.sui.io/graphql"
 
     public init() { }
 }

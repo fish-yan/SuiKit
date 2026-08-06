@@ -39,6 +39,18 @@ public struct PageInfo: Equatable {
     /// Whether or not there is another page before the current page.
     public var hasPreviousPage: Bool
 
+    public init(
+        startCursor: String? = nil,
+        endCursor: String? = nil,
+        hasNextPage: Bool,
+        hasPreviousPage: Bool = false
+    ) {
+        self.startCursor = startCursor
+        self.endCursor = endCursor
+        self.hasNextPage = hasNextPage
+        self.hasPreviousPage = hasPreviousPage
+    }
+
     public init(graphql: GetCheckpointsQuery.Data.Checkpoints.PageInfo) {
         self.startCursor = graphql.startCursor
         self.endCursor = graphql.endCursor

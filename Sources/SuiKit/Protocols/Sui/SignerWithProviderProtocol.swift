@@ -26,7 +26,7 @@
 import Foundation
 
 public protocol SignerWithProviderProtocol {
-    var provider: SuiProvider { get set }
+    var provider: Provider { get set }
     var faucetProvider: FaucetClient { get set }
 
     func getAddress() throws -> String

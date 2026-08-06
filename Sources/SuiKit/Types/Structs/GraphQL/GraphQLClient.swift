@@ -26,16 +26,21 @@
 import Foundation
 import Apollo
 import ApolloAPI
+import SwiftyJSON
 
 /// A wrapper struct for being able to query data from the GraphQL node.
 internal struct GraphQLClient {
+    private struct RequestBody: Encodable {
+        let query: String
+        let variables: [String: SuiJSON]
+    }
+
     /// Given the Apollo client and a query that conforms to the GraphQLQuery type, fetch data from that endpoint and return the conformed object representing the data.
     /// - Parameters:
     ///   - client: The Apollo client used for sending the query out.
     ///   - query: The query itself containing information such as user inputs parameters, the endpoint itself, and various other metadata for making the GraphQL client functional.
     /// - Returns: A GraphQLResult object of either T.Data type, or throws an error.
     internal static func fetchQuery<T: GraphQLQuery>(client: ApolloClient, query: T) async throws -> GraphQLResult<T.Data> {
-        print("DEBUG::: MARCUS - QUERY - \(query.__variables)\n\n")
         return try await withCheckedThrowingContinuation { (con: CheckedContinuation<GraphQLResult<T.Data>, Error>) in
             _ = client.fetch(query: query) { @Sendable result in
                 switch result {
@@ -46,5 +51,43 @@ internal struct GraphQLClient {
                 }
             }
         }
+    }
+
+    internal static func performMutation<T: GraphQLMutation>(
+        client: ApolloClient,
+        mutation: T
+    ) async throws -> GraphQLResult<T.Data> {
+        try await withCheckedThrowingContinuation { continuation in
+            client.perform(mutation: mutation) { result in
+                continuation.resume(with: result)
+            }
+        }
+    }
+
+    internal static func execute(
+        endpoint: URL,
+        query: String,
+        variables: [String: SuiJSON] = [:]
+    ) async throws -> JSON {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(RequestBody(query: query, variables: variables))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw SuiError.customError(message: "GraphQL request failed")
+        }
+
+        let json = try JSON(data: data)
+        if let errors = json["errors"].array, !errors.isEmpty {
+            let message = errors.compactMap { $0["message"].string }.joined(separator: "; ")
+            throw SuiError.customError(message: "GraphQL error: \(message)")
+        }
+        guard json["data"].exists(), json["data"].type != .null else {
+            throw SuiError.customError(message: "Missing GraphQL data")
+        }
+        return json["data"]
     }
 }

@@ -34,6 +34,11 @@ public struct ExecutionStatus {
     /// An optional `String` type representing any errors if the transaction failed.
     public let error: String?
 
+    public init(status: ExecutionStatusType, error: String? = nil) {
+        self.status = status
+        self.error = error
+    }
+
     public init?(input: JSON) {
         guard let status = ExecutionStatusType.fromJSON(input["status"]) else { return nil }
         self.status = status

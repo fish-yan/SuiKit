@@ -26,9 +26,9 @@
 import Foundation
 
 public struct BuildOptions {
-    /// A `SuiProvider` object that provides network connectivity.
+    /// A `Provider` object that provides network connectivity.
     /// It is optional and can be `nil`.
-    public var provider: SuiProvider?
+    public var provider: Provider?
 
     /// A Boolean that specifies whether only a transaction kind is allowed.
     /// It is optional and can be `nil`.
@@ -53,12 +53,12 @@ public struct BuildOptions {
 
     /// Initializes a new instance of `BuildOptions` with optional parameters.
     /// - Parameters:
-    ///   - provider: A `SuiProvider` object, default is `nil`.
+    ///   - provider: A `Provider` object, default is `nil`.
     ///   - onlyTransactionKind: A Boolean value, default is `nil`.
     ///   - limits: A `Limits` object, default is `nil`.
     ///   - protocolConfig: A `ProtocolConfig` object, default is `nil`.
     public init(
-        provider: SuiProvider? = nil,
+        provider: Provider? = nil,
         onlyTransactionKind: Bool? = nil,
         limits: Limits? = nil,
         protocolConfig: ProtocolConfig? = nil
