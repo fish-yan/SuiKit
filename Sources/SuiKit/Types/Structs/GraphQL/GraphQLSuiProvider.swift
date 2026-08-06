@@ -213,16 +213,13 @@ public struct GraphQLSuiProvider: Provider {
     /// - Throws: A `SuiError` if an error occurs during the JSON RPC call or if there are errors in the response data.
     /// - Returns: A `Checkpoint` object representing the retrieved checkpoint.
     public func getCheckpoint(digest: String) async throws -> Checkpoint {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: GetCheckpointQuery(
-                id: .init(
-                    CheckpointId(digest: digest)
-                )
-            )
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.checkpointQuery,
+            variables: ["digest": .string(digest), "sequenceNumber": .null]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
-        return Checkpoint(graphql: data)
+        guard data["checkpoint"].type != .null else { throw SuiError.customError(message: "Checkpoint not found") }
+        return checkpoint(data["checkpoint"])
     }
 
     /// Return a checkpoint.
@@ -230,16 +227,13 @@ public struct GraphQLSuiProvider: Provider {
     /// - Throws: A `SuiError` if an error occurs during the JSON RPC call or if there are errors in the response data.
     /// - Returns: A `Checkpoint` object representing the retrieved checkpoint.
     public func getCheckpoint(sequenceNumber: Int) async throws -> Checkpoint {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: GetCheckpointQuery(
-                id: .init(
-                    CheckpointId(sequenceNumber: sequenceNumber)
-                )
-            )
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.checkpointQuery,
+            variables: ["digest": .null, "sequenceNumber": .number(Double(sequenceNumber))]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
-        return Checkpoint(graphql: data)
+        guard data["checkpoint"].type != .null else { throw SuiError.customError(message: "Checkpoint not found") }
+        return checkpoint(data["checkpoint"])
     }
 
     /// Return paginated list of checkpoints.
@@ -254,26 +248,21 @@ public struct GraphQLSuiProvider: Provider {
         limit: Int? = nil,
         order: SortOrder = .descending
     ) async throws -> CheckpointPage {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: order == .descending ?
-                GetCheckpointsQuery(
-                    first: .none,
-                    before: (cursor != nil ? .init(stringLiteral: cursor!) : .none),
-                    last: (limit != nil ? .init(integerLiteral: limit!) : .none),
-                    after: .none
-                ) :
-                GetCheckpointsQuery(
-                    first: (limit != nil ? .init(integerLiteral: limit!) : .none),
-                    before: .none,
-                    last: .none,
-                    after: (cursor != nil ? .init(stringLiteral: cursor!) : .none)
-                )
+        let descending = order == .descending
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.checkpointsQuery,
+            variables: [
+                "first": descending ? .null : limit.map { .number(Double($0)) } ?? .null,
+                "after": descending ? .null : cursor.map(SuiJSON.string) ?? .null,
+                "last": descending ? limit.map { .number(Double($0)) } ?? .null : .null,
+                "before": descending ? cursor.map(SuiJSON.string) ?? .null : .null
+            ]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
+        let checkpoints = data["checkpoints"]
         return CheckpointPage(
-            data: data.checkpoints.nodes.map { Checkpoint(graphql: $0) },
-            pageInfo: PageInfo(graphql: data.checkpoints.pageInfo)
+            data: checkpoints["nodes"].arrayValue.map(checkpoint),
+            pageInfo: pageInfo(checkpoints["pageInfo"])
         )
     }
 
@@ -445,20 +434,13 @@ public struct GraphQLSuiProvider: Provider {
         objectId: String,
         options: SuiObjectDataOptions? = nil
     ) async throws -> SuiObjectResponse? {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: GetObjectQuery(
-                id: objectId,
-                showBcs: options?.showBcs ?? false,
-                showOwner: options?.showOwner ?? false,
-                showPreviousTransaction: options?.showPreviousTransaction ?? false,
-                showContent: options?.showContent ?? false,
-                showType: options?.showType ?? false,
-                showStorageRebate: options?.showStorageRebate ?? false
-            )
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.objectQuery,
+            variables: ["id": .string(try validatedAddress(objectId))]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
-        return SuiObjectResponse(error: nil, data: SuiObjectData(graphql: data.object!))
+        guard data["object"].type != .null else { return nil }
+        return SuiObjectResponse(error: nil, data: objectData(data["object"], options: options))
     }
 
     /// Return the protocol config table for the given version number. If the version number is not specified, If none is specified, the node uses the version of the latest epoch it has processed.
@@ -522,27 +504,17 @@ public struct GraphQLSuiProvider: Provider {
         ids: [ObjectId],
         options: SuiObjectDataOptions? = nil
     ) async throws -> [SuiObjectResponse] {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: MultiGetObjectsQuery(
-                ids: ids,
-                limit: .init(integerLiteral: ids.count),
-                cursor: .none,
-                showBcs: options?.showBcs ?? false,
-                showContent: options?.showContent ?? false,
-                showDisplay: options?.showDisplay ?? false,
-                showType: options?.showType ?? false,
-                showOwner: options?.showOwner ?? false,
-                showPreviousTransaction: options?.showPreviousTransaction ?? false,
-                showStorageRebate: options?.showStorageRebate ?? false
-            )
+        let keys = try ids.map { id in
+            SuiJSON.object(["address": .string(try validatedAddress(id))])
+        }
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.multiGetObjectsQuery,
+            variables: ["keys": .array(keys)]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
-        return data.objects.nodes.map { object in
-            SuiObjectResponse(error: nil, data: SuiObjectData(
-                graphql: object,
-                showBcs: options?.showBcs ?? false
-            ))
+        return data["multiGetObjects"].arrayValue.compactMap { object in
+            guard object.type != .null else { return nil }
+            return SuiObjectResponse(error: nil, data: objectData(object, options: options))
         }
     }
 
@@ -585,22 +557,16 @@ public struct GraphQLSuiProvider: Provider {
         version: Int,
         options: SuiObjectDataOptions? = nil
     ) async throws -> ObjectRead? {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: TryGetPastObjectQuery(
-                id: id,
-                version: .init(stringLiteral: "\(version)"),
-                showBcs: options?.showBcs ?? false,
-                showOwner: options?.showOwner ?? false,
-                showPreviousTransaction: options?.showPreviousTransaction ?? false,
-                showContent: options?.showContent ?? false,
-                showType: options?.showType ?? false,
-                showStorageRebate: options?.showStorageRebate ?? false
-            )
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.pastObjectQuery,
+            variables: [
+                "id": .string(try validatedAddress(id)),
+                "version": .number(Double(version))
+            ]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
-        // TODO: Implement proper error handling.
-        return .versionFound(SuiObjectData(graphql: data.object!, showBcs: options?.showBcs ?? false))
+        guard data["object"].type != .null else { return nil }
+        return .versionFound(objectData(data["object"], options: options))
     }
 
     /// Return the object information for a specified version.
@@ -636,16 +602,12 @@ public struct GraphQLSuiProvider: Provider {
     public func getAllBalances(
         account: Account
     ) async throws -> [CoinBalance] {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: GetAllBalancesQuery(
-                owner: try account.address(),
-                limit: .none,
-                cursor: .none
-            )
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.allBalancesQuery,
+            variables: ["owner": .string(try account.address())]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
-        return try data.address!.balances.nodes.map { try CoinBalance(graphql: $0) }
+        return try data["address"]["balances"]["nodes"].arrayValue.map(balance)
     }
 
     /// Return all Coin objects owned by an address.
@@ -677,15 +639,16 @@ public struct GraphQLSuiProvider: Provider {
         account: any PublicKeyProtocol,
         coinType: String? = nil
     ) async throws -> CoinBalance {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: GetBalanceQuery(
-                owner: try account.toSuiAddress(),
-                type: coinType != nil ? .init(stringLiteral: coinType!) : .none
-            )
+        let type = coinType ?? "0x2::sui::SUI"
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.balanceQuery,
+            variables: [
+                "owner": .string(try account.toSuiAddress()),
+                "coinType": .string(type)
+            ]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
-        return try CoinBalance(graphql: data.address!.balance!)
+        return try balance(data["address"]["balance"])
     }
 
     /// Return metadata (e.g., symbol, decimals) for a coin.
@@ -717,19 +680,21 @@ public struct GraphQLSuiProvider: Provider {
         cursor: String? = nil,
         limit: UInt? = nil
     ) async throws -> PaginatedCoins {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: GetCoinsQuery(
-                owner: account,
-                first: limit != nil ? .init(integerLiteral: Int(limit!)) : .null,
-                cursor: cursor != nil ? .init(stringLiteral: cursor!) : .null,
-                type: coinType != nil ? .init(stringLiteral: coinType!) : .null
-            )
+        let type = coinType ?? "0x2::sui::SUI"
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.coinsQuery,
+            variables: [
+                "owner": .string(try validatedAddress(account)),
+                "first": limit.map { .number(Double($0)) } ?? .null,
+                "after": cursor.map(SuiJSON.string) ?? .null,
+                "type": .string("0x2::coin::Coin<\(type)>")
+            ]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
+        let coins = data["address"]["objects"]
         return PaginatedCoins(
-            data: try data.address!.coins.nodes.map { try CoinStruct(graphql: $0) },
-            pageInfo: PageInfo(graphql: data.address!.coins.pageInfo)
+            data: try coins["nodes"].arrayValue.map(coin),
+            pageInfo: pageInfo(coins["pageInfo"])
         )
     }
 
@@ -881,32 +846,22 @@ public struct GraphQLSuiProvider: Provider {
         cursor: String? = nil,
         limit: Int? = nil
     ) async throws -> PaginatedObjectsResponse {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: GetOwnedObjectsQuery(
-                owner: owner,
-                limit: limit != nil ? .init(integerLiteral: limit!) : .none,
-                cursor: cursor != nil ? .init(stringLiteral: cursor!) : .none,
-                showBcs: options?.showBcs ?? false,
-                showContent: options?.showContent ?? false,
-                showType: options?.showType ?? false,
-                showOwner: options?.showOwner ?? false,
-                showPreviousTransaction: options?.showPreviousTransaction ?? false,
-                showStorageRebate: options?.showStorageRebate ?? false,
-                filter: filter != nil ? .init(ObjectFilter(filter: filter!)) : .none
-            )
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.ownedObjectsQuery,
+            variables: [
+                "owner": .string(try validatedAddress(owner)),
+                "first": limit.map { .number(Double($0)) } ?? .null,
+                "after": cursor.map(SuiJSON.string) ?? .null,
+                "filter": try objectFilter(filter)
+            ]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
+        let objects = data["address"]["objects"]
         return PaginatedObjectsResponse(
-            data: data.address!.objects.nodes.map {
-                SuiObjectResponse(
-                    error: nil,
-                    data: SuiObjectData(graphql: $0, showBcs: options?.showBcs ?? false)
-                )
+            data: objects["nodes"].arrayValue.map {
+                SuiObjectResponse(error: nil, data: objectData($0, options: options))
             },
-            pageInfo: PageInfo(
-                graphql: data.address!.objects.pageInfo
-            )
+            pageInfo: pageInfo(objects["pageInfo"])
         )
     }
 
@@ -1001,12 +956,15 @@ public struct GraphQLSuiProvider: Provider {
     /// - Returns: A `ValidatorApys` object representing the APYs of validators.
     /// - Throws: An error if the RPC request fails.
     public func getValidatorsApy() async throws -> ValidatorApys {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: GetValidatorsApyQuery()
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.validatorsApyQuery
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
-        return ValidatorApys(graphql: data)
+        let validators = data["epoch"]["validatorSet"]["activeValidators"]["nodes"].arrayValue
+        return ValidatorApys(input: JSON([
+            "epoch": data["epoch"]["epochId"].stringValue,
+            "apys": validators.compactMap(validatorApy)
+        ]))
     }
 
     /// Queries events from the blockchain with provided filters.
@@ -1023,28 +981,22 @@ public struct GraphQLSuiProvider: Provider {
         limit: Int? = nil,
         order: SortOrder? = nil
     ) async throws -> PaginatedSuiMoveEvent {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: order == .ascending ?
-            QueryEventsQuery(
-                filter: query != nil ? EventFilter(suiEventFilter: query!) : EventFilter(),
-                before: .none,
-                after: .none,
-                first: (limit != nil ? .init(integerLiteral: limit!) : .none),
-                last: .none
-            ) :
-            QueryEventsQuery(
-                filter: query != nil ? EventFilter(suiEventFilter: query!) : EventFilter(),
-                before: .none,
-                after: .none,
-                first: .none,
-                last: (limit != nil ? .init(integerLiteral: limit!) : .none)
-            )
+        let ascending = order == .ascending
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.eventsQuery,
+            variables: [
+                "first": ascending ? limit.map { .number(Double($0)) } ?? .null : .null,
+                "after": ascending ? cursor.map { .string($0.txDigest) } ?? .null : .null,
+                "last": ascending ? .null : limit.map { .number(Double($0)) } ?? .null,
+                "before": .null,
+                "filter": try eventFilter(query)
+            ]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
+        let events = data["events"]
         return PaginatedSuiMoveEvent(
-            data: data.events.nodes.map { SuiEvent(graphql: $0) },
-            pageInfo: PageInfo(graphql: data.events.pageInfo)
+            data: events["nodes"].arrayValue.compactMap(suiEvent),
+            pageInfo: pageInfo(events["pageInfo"])
         )
     }
 
@@ -1214,6 +1166,119 @@ public struct GraphQLSuiProvider: Provider {
             return "Result(\(argument["cmd"].intValue))"
         default:
             return "GasCoin"
+        }
+    }
+
+    private func balance(_ json: JSON) throws -> CoinBalance {
+        try CoinBalance(
+            coinType: json["coinType"]["repr"].stringValue,
+            coinObjectCount: 0,
+            totalBalance: json["totalBalance"].stringValue,
+            lockedBalance: nil
+        )
+    }
+
+    private func checkpoint(_ json: JSON) -> Checkpoint {
+        Checkpoint(input: JSON([
+            "epoch": json["epoch"]["epochId"].string as Any,
+            "sequenceNumber": json["sequenceNumber"].string as Any,
+            "digest": json["digest"].string as Any,
+            "networkTotalTransactions": json["networkTotalTransactions"].string as Any,
+            "previousDigest": json["previousCheckpointDigest"].string as Any,
+            "epochRollingGasCostSummary": json["rollingGasSummary"].object as Any,
+            "timestampMs": milliseconds(from: json["timestamp"].string) as Any,
+            "validatorSignature": json["validatorSignatures"]["signature"].string as Any,
+            "transactions": json["transactions"]["nodes"].arrayValue.map { $0["digest"].stringValue }
+        ]))
+    }
+
+    private func objectData(_ object: JSON, options: SuiObjectDataOptions?) -> SuiObjectData {
+        let moveObject = object["asMoveObject"].type == .null ? object : object["asMoveObject"]
+        let type = moveObject["contents"]["type"]["repr"].string
+        let version = object["version"].stringValue
+        let bcs: RawData? = options?.showBcs == true && moveObject["moveObjectBcs"].string != nil
+            ? .moveObject(MoveObjectRaw(
+                bcsBytes: moveObject["moveObjectBcs"].stringValue,
+                hasPublicTransfer: moveObject["hasPublicTransfer"].boolValue,
+                type: type ?? "",
+                version: version
+            ))
+            : nil
+        let content: SuiParsedData? = options?.showContent == true && type != nil
+            ? .moveObject(MoveObject(
+                fields: moveObject["contents"]["json"],
+                hasPublicTransfer: moveObject["hasPublicTransfer"].boolValue,
+                type: type!
+            ))
+            : nil
+        return SuiObjectData(
+            bcs: bcs,
+            content: content,
+            digest: object["digest"].stringValue,
+            display: nil,
+            objectId: object["address"].stringValue,
+            owner: nil,
+            previousTransaction: options?.showPreviousTransaction == true
+                ? object["previousTransaction"]["digest"].string : nil,
+            storageRebate: options?.showStorageRebate == true ? object["storageRebate"].int : nil,
+            type: options?.showType == true ? type : nil,
+            version: version
+        )
+    }
+
+    private func coin(_ json: JSON) throws -> CoinStruct {
+        let moveObject = json["asMoveObject"]
+        let coinType = moveObject["contents"]["type"]["repr"].stringValue
+        let typeArgument = coinType
+            .split(separator: "<", maxSplits: 1)
+            .last
+            .map { String($0.dropLast()) } ?? coinType
+        return try CoinStruct(
+            coinType: typeArgument,
+            coinObjectId: json["address"].stringValue,
+            version: json["version"].stringValue,
+            digest: json["digest"].stringValue,
+            balance: moveObject["contents"]["json"]["balance"].stringValue,
+            previousTransaction: json["previousTransaction"]["digest"].stringValue
+        )
+    }
+
+    private func validatorApy(_ validator: JSON) -> ValidatorApy? {
+        let contents = validator["contents"]["json"]
+        let address = contents["sui_address"].string ?? contents["suiAddress"].string
+        guard let address else { return nil }
+        return ValidatorApy(address: address)
+    }
+
+    private func eventFilter(_ filter: SuiEventFilter?) throws -> SuiJSON {
+        guard let filter else { return .null }
+        switch filter {
+        case .sender(let address):
+            return .object(["sender": .string(address)])
+        case .moveEventType(let type):
+            return .object(["type": .string(type)])
+        case .package(let package):
+            return .object(["module": .string(package)])
+        case .moveModule(let module), .moveEventModule(let module):
+            return .object(["module": .string("\(module.package)::\(module.module)" )])
+        default:
+            throw SuiError.notImplemented
+        }
+    }
+
+    private func objectFilter(_ filter: SuiObjectDataFilter?) throws -> SuiJSON {
+        guard let filter else { return .null }
+        switch filter {
+        case .structType(let type), .package(let type):
+            return .object(["type": .string(type)])
+        case .addressOwner(let owner), .objectOwner(let owner):
+            return .object(["owner": .string(owner)])
+        case .objectId(let id):
+            return .object(["objectIds": .array([.string(id)])])
+        case .objectIds(let ids):
+            return .object(["objectIds": .array(ids.map(SuiJSON.string))])
+        default:
+            throw SuiError.notImplemented
         }
     }
 
@@ -1650,6 +1715,114 @@ public struct GraphQLSuiProvider: Provider {
         protocolVersion
         configs { key value }
         featureFlags { key value }
+      }
+    }
+    """
+
+    private static let allBalancesQuery = """
+    query AllBalances($owner: SuiAddress!) {
+      address(address: $owner) {
+        balances(first: 50) { nodes { coinType { repr } totalBalance } }
+      }
+    }
+    """
+
+    private static let checkpointFields = """
+    digest epoch { epochId } rollingGasSummary { computationCost storageCost storageRebate nonRefundableStorageFee }
+    networkTotalTransactions previousCheckpointDigest sequenceNumber timestamp validatorSignatures { signature }
+    transactions(first: 50) { nodes { digest } }
+    """
+
+    private static let objectFields = """
+    address version digest storageRebate previousTransaction { digest }
+    asMoveObject { hasPublicTransfer moveObjectBcs contents { json type { repr } } }
+    """
+
+    private static let objectQuery = """
+    query Object($id: SuiAddress!) { object(address: $id) { \(objectFields) } }
+    """
+
+    private static let pastObjectQuery = """
+    query PastObject($id: SuiAddress!, $version: UInt53!) {
+      object(address: $id, version: $version) { \(objectFields) }
+    }
+    """
+
+    private static let multiGetObjectsQuery = """
+    query MultiGetObjects($keys: [ObjectKey!]!) {
+      multiGetObjects(keys: $keys) {
+        address version digest storageRebate previousTransaction { digest }
+        hasPublicTransfer moveObjectBcs contents { json type { repr } }
+      }
+    }
+    """
+
+    private static let ownedObjectsQuery = """
+    query OwnedObjects($owner: SuiAddress!, $first: Int, $after: String, $filter: ObjectFilter) {
+      address(address: $owner) {
+        objects(first: $first, after: $after, filter: $filter) {
+          pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
+          nodes { \(objectFields) }
+        }
+      }
+    }
+    """
+
+    private static let checkpointQuery = """
+    query Checkpoint($digest: String, $sequenceNumber: UInt53) {
+      checkpoint(digest: $digest, sequenceNumber: $sequenceNumber) { \(checkpointFields) }
+    }
+    """
+
+    private static let checkpointsQuery = """
+    query Checkpoints($first: Int, $after: String, $last: Int, $before: String) {
+      checkpoints(first: $first, after: $after, last: $last, before: $before) {
+        pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
+        nodes { \(checkpointFields) }
+      }
+    }
+    """
+
+    private static let balanceQuery = """
+    query Balance($owner: SuiAddress!, $coinType: String!) {
+      address(address: $owner) {
+        balance(coinType: $coinType) { coinType { repr } totalBalance }
+      }
+    }
+    """
+
+    private static let coinsQuery = """
+    query Coins($owner: SuiAddress!, $first: Int, $after: String, $type: String!) {
+      address(address: $owner) {
+        objects(first: $first, after: $after, filter: { type: $type }) {
+          pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
+          nodes {
+            address version digest previousTransaction { digest }
+            asMoveObject { contents { json type { repr } } }
+          }
+        }
+      }
+    }
+    """
+
+    private static let validatorsApyQuery = """
+    query ValidatorsApy {
+      epoch {
+        epochId
+        validatorSet { activeValidators(first: 200) { nodes { contents { json } } } }
+      }
+    }
+    """
+
+    private static let eventsQuery = """
+    query Events($filter: EventFilter, $first: Int, $after: String, $last: Int, $before: String) {
+      events(filter: $filter, first: $first, after: $after, last: $last, before: $before) {
+        pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
+        nodes {
+          eventBcs timestamp sender { address }
+          transactionModule { name package { address } }
+          contents { type { repr } json }
+        }
       }
     }
     """
