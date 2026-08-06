@@ -181,7 +181,7 @@ public struct GraphQLSuiProvider: Provider {
     ///   - signature: A list of signatures (`flag || signature || pubkey` bytes, as base-64 encoded string). Signature is committed to the intent message of the transaction data, as base-64 encoded string.
     ///   - options: options for specifying the content to be returned
     ///   - requestType: The request type, derived from `SuiTransactionBlockResponseOptions` if None
-    /// - Throws: A `SuiError` if an error occurs during the JSON RPC call or if there are errors in the response data.
+    /// - Throws: A `SuiError` if the GraphQL request fails or the response cannot be decoded.
     /// - Returns: A `SuiTransactionBlockResponse` containing the results of the executed transaction block.
     public func executeTransactionBlock(
         transactionBlock: [UInt8],
@@ -463,19 +463,23 @@ public struct GraphQLSuiProvider: Provider {
 
     /// Return the protocol config table for the given version number. If the version number is not specified, If none is specified, the node uses the version of the latest epoch it has processed.
     /// - Parameter version: An optional protocol version specifier. If omitted, the latest protocol config table for the node will be returned.
-    /// - Throws: A `SuiError` if an error occurs during the JSON RPC call or if there are errors in the response data.
+    /// - Throws: A `SuiError` if the version is invalid or the GraphQL request fails.
     /// - Returns: A `ProtocolConfig` object representing the protocol configuration.
     public func getProtocolConfig(
         version: String? = nil
     ) async throws -> ProtocolConfig {
-        let result = try await GraphQLClient.fetchQuery(
-            client: self.apollo,
-            query: GetProtocolConfigQuery(
-                protocolVersion: version != nil ? .init(stringLiteral: version!) : .none
-            )
+        let data = try await GraphQLClient.execute(
+            endpoint: try graphQLEndpoint(),
+            query: Self.protocolConfigsQuery,
+            variables: [
+                "version": try version.map(protocolVersionVariable) ?? .null
+            ]
         )
-        guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
-        return ProtocolConfig(graphql: data.protocolConfig)
+        let protocolConfigs = data["protocolConfigs"]
+        guard protocolConfigs.type != .null else {
+            throw SuiError.customError(message: "Missing GraphQL protocol configs")
+        }
+        return protocolConfig(protocolConfigs)
     }
 
     /// Return the total number of transaction blocks known to the server.
@@ -1220,6 +1224,55 @@ public struct GraphQLSuiProvider: Provider {
         return .number(value)
     }
 
+    private func protocolVersionVariable(_ version: String) throws -> SuiJSON {
+        guard let value = UInt64(version), value <= 9_007_199_254_740_991 else {
+            throw SuiError.customError(message: "Invalid protocol version: \(version)")
+        }
+        return .number(Double(value))
+    }
+
+    private func protocolConfig(_ json: JSON) -> ProtocolConfig {
+        let attributeTypeMap: [String: (String) -> ProtocolConfigValue] = [
+            "max_arguments": { .u32($0) },
+            "max_gas_payment_objects": { .u32($0) },
+            "max_modules_in_publish": { .u32($0) },
+            "max_programmable_tx_commands": { .u32($0) },
+            "max_pure_argument_size": { .u32($0) },
+            "max_type_argument_depth": { .u32($0) },
+            "max_type_arguments": { .u32($0) },
+            "move_binary_format_version": { .u32($0) },
+            "random_beacon_reduction_allowed_delta": { .u16($0) },
+            "scoring_decision_cutoff_value": { .f64($0) },
+            "scoring_decision_mad_divisor": { .f64($0) }
+        ]
+        let attributes = json["configs"].arrayValue.reduce(
+            into: [String: ProtocolConfigValue?]()
+        ) { result, config in
+            guard let key = config["key"].string,
+                  let value = config["value"].string else {
+                return
+            }
+            result[key] = attributeTypeMap[key]?(value) ?? .u64(value)
+        }
+        let featureFlags = json["featureFlags"].arrayValue.reduce(
+            into: [String: Bool]()
+        ) { result, featureFlag in
+            guard let key = featureFlag["key"].string,
+                  let value = featureFlag["value"].bool else {
+                return
+            }
+            result[key] = value
+        }
+        let protocolVersion = json["protocolVersion"].stringValue
+        return ProtocolConfig(
+            attributes: attributes,
+            featureFlags: featureFlags,
+            maxSupportedProtocolVersion: protocolVersion,
+            minSupportedProtocolVersion: "1",
+            protocolVersion: protocolVersion
+        )
+    }
+
     private func dynamicFieldNameVariable(_ name: DynamicFieldName) throws -> SuiJSON {
         let serializer = Serializer()
         switch name.type {
@@ -1589,6 +1642,16 @@ public struct GraphQLSuiProvider: Provider {
     digest
     transactionJson
     effects { \(effectsFields) }
+    """
+
+    private static let protocolConfigsQuery = """
+    query ProtocolConfigs($version: UInt53) {
+      protocolConfigs(version: $version) {
+        protocolVersion
+        configs { key value }
+        featureFlags { key value }
+      }
+    }
     """
 
     private static let transactionQuery = """
