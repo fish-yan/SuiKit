@@ -39,6 +39,17 @@ public struct CoinBalance: Equatable {
     /// This is typically the sum of the values of all coin objects of this coin type.
     public let totalBalance: String
 
+    /// The balance held in traditional `Coin<T>` objects.
+    ///
+    /// This is distinct from `addressBalance` on networks that support address
+    /// balances. Their sum is `totalBalance`.
+    public let coinBalance: String?
+
+    /// The balance held by Sui's address-balance accumulator.
+    ///
+    /// It can be non-zero even when `coinObjectCount` is zero.
+    public let addressBalance: String?
+
     /// An optional `LockedBalance` instance representing any locked balance of the coin type.
     /// Locked balance is the portion of the total balance that is restricted or not readily available for use.
     public let lockedBalance: LockedBalance?
@@ -47,6 +58,8 @@ public struct CoinBalance: Equatable {
         self.coinType = try StructTag.fromStr(graphql.coinType.repr)
         self.coinObjectCount = Int(graphql.coinObjectCount!)!
         self.totalBalance = graphql.totalBalance!
+        self.coinBalance = nil
+        self.addressBalance = nil
         self.lockedBalance = nil
     }
 
@@ -54,6 +67,8 @@ public struct CoinBalance: Equatable {
         self.coinType = try StructTag.fromStr(graphql.coinType.repr)
         self.coinObjectCount = Int(graphql.coinObjectCount!)!
         self.totalBalance = graphql.totalBalance!
+        self.coinBalance = nil
+        self.addressBalance = nil
         self.lockedBalance = nil
     }
 
@@ -61,11 +76,15 @@ public struct CoinBalance: Equatable {
         coinType: String,
         coinObjectCount: Int,
         totalBalance: String,
-        lockedBalance: LockedBalance?
+        lockedBalance: LockedBalance?,
+        coinBalance: String? = nil,
+        addressBalance: String? = nil
     ) throws {
         self.coinType = try StructTag.fromStr(coinType)
         self.coinObjectCount = coinObjectCount
         self.totalBalance = totalBalance
+        self.coinBalance = coinBalance
+        self.addressBalance = addressBalance
         self.lockedBalance = lockedBalance
     }
 }

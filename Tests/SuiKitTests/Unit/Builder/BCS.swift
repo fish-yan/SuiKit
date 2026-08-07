@@ -57,6 +57,47 @@ final class BCSTest: XCTestCase {
         XCTAssertEqual(moveCallBytes, resultBytes)
     }
 
+    func testFundsWithdrawalAndValidDuringRoundTrip() throws {
+        let chain = Array(UInt8(0)...UInt8(31))
+        let withdrawal = Input(type: .fundsWithdrawal(
+            FundsWithdrawal(
+                amount: 42,
+                coinType: try TypeTag(stringValue: "0x2::sui::SUI")
+            )
+        ))
+        let withdrawalSerializer = Serializer()
+        try withdrawal.serialize(withdrawalSerializer)
+        let withdrawalBytes = [UInt8](withdrawalSerializer.output())
+        XCTAssertEqual(withdrawalBytes[0], 2)
+        XCTAssertEqual(withdrawalBytes[1], 0)
+        XCTAssertEqual(withdrawalBytes[2], 42)
+
+        let expiration = TransactionExpiration.validDuring(
+            minEpoch: 7,
+            maxEpoch: 7,
+            minTimestamp: nil,
+            maxTimestamp: nil,
+            chain: chain,
+            nonce: 9
+        )
+        let serializer = Serializer()
+        try expiration.serialize(serializer)
+        let decoded = try TransactionExpiration.deserialize(
+            from: Deserializer(data: serializer.output())
+        )
+
+        guard case let .validDuring(minEpoch, maxEpoch, minTimestamp, maxTimestamp, decodedChain, nonce) = decoded
+        else {
+            return XCTFail("Expected ValidDuring expiration")
+        }
+        XCTAssertEqual(minEpoch, 7)
+        XCTAssertEqual(maxEpoch, 7)
+        XCTAssertNil(minTimestamp)
+        XCTAssertNil(maxTimestamp)
+        XCTAssertEqual(decodedChain, chain)
+        XCTAssertEqual(nonce, 9)
+    }
+
     func testThatValidatesThatAProgrammableTransactionWillSerializeAndDeserializeAsIntended() throws {
         let serValue = Serializer()
         let serArguments = Serializer()

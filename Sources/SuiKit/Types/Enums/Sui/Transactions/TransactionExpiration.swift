@@ -33,6 +33,16 @@ public enum TransactionExpiration: KeyProtocol {
     /// Expiration time set as an epoch timestamp.
     case epoch(UInt64)
 
+    /// A bounded validity window required when paying gas from an address balance.
+    case validDuring(
+        minEpoch: UInt64?,
+        maxEpoch: UInt64?,
+        minTimestamp: UInt64?,
+        maxTimestamp: UInt64?,
+        chain: [UInt8],
+        nonce: UInt32
+    )
+
     public func serialize(_ serializer: Serializer) throws {
         switch self {
         case .none:
@@ -40,6 +50,17 @@ public enum TransactionExpiration: KeyProtocol {
         case .epoch(let int):
             try Serializer.u8(serializer, UInt8(1))
             try Serializer.u64(serializer, UInt64(int))
+        case let .validDuring(minEpoch, maxEpoch, minTimestamp, maxTimestamp, chain, nonce):
+            guard chain.count == 32 else {
+                throw SuiError.customError(message: "Address-balance gas requires a 32-byte genesis checkpoint digest")
+            }
+            try Serializer.u8(serializer, UInt8(2))
+            try serializer._optional(minEpoch, Serializer.u64)
+            try serializer._optional(maxEpoch, Serializer.u64)
+            try serializer._optional(minTimestamp, Serializer.u64)
+            try serializer._optional(maxTimestamp, Serializer.u64)
+            serializer.fixedBytes(Data(chain))
+            try Serializer.u32(serializer, nonce)
         }
     }
 
@@ -52,6 +73,15 @@ public enum TransactionExpiration: KeyProtocol {
         case 1:
             return TransactionExpiration.epoch(
                 try Deserializer.u64(deserializer)
+            )
+        case 2:
+            return .validDuring(
+                minEpoch: try deserializer._optional(valueDecoder: Deserializer.u64),
+                maxEpoch: try deserializer._optional(valueDecoder: Deserializer.u64),
+                minTimestamp: try deserializer._optional(valueDecoder: Deserializer.u64),
+                maxTimestamp: try deserializer._optional(valueDecoder: Deserializer.u64),
+                chain: [UInt8](try deserializer.fixedBytes(length: 32)),
+                nonce: try Deserializer.u32(deserializer)
             )
         default:
             throw SuiError.customError(message: "Unable to Deserialize")

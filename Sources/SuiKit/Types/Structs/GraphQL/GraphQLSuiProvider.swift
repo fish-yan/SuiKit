@@ -208,6 +208,11 @@ public struct GraphQLSuiProvider: Provider {
         return result.data!.chainIdentifier
     }
 
+    /// Returns the full digest of the genesis checkpoint.
+    public func getGenesisCheckpointDigest() async throws -> CheckpointDigest {
+        try await getCheckpoint(sequenceNumber: 0).digest
+    }
+
     /// Return a checkpoint.
     /// - Parameter digest: Checkpoint digest
     /// - Throws: A `SuiError` if an error occurs during the JSON RPC call or if there are errors in the response data.
@@ -639,12 +644,20 @@ public struct GraphQLSuiProvider: Provider {
         account: any PublicKeyProtocol,
         coinType: String? = nil
     ) async throws -> CoinBalance {
+        try await getBalance(account: try account.toSuiAddress(), coinType: coinType)
+    }
+
+    /// Return the total balance for a canonical Sui address.
+    public func getBalance(
+        account: String,
+        coinType: String? = nil
+    ) async throws -> CoinBalance {
         let type = coinType ?? "0x2::sui::SUI"
         let data = try await GraphQLClient.execute(
             endpoint: try graphQLEndpoint(),
             query: Self.balanceQuery,
             variables: [
-                "owner": .string(try account.toSuiAddress()),
+                "owner": .string(account),
                 "coinType": .string(type)
             ]
         )
@@ -949,7 +962,9 @@ public struct GraphQLSuiProvider: Provider {
             query: GetTotalSupplyQuery(coinType: coinType)
         )
         guard let data = result.data else { throw SuiError.customError(message: "Missing GraphQL data") }
-        return BigInt(data.coinMetadata!.supply!, radix: 10)! * BigInt(10).power(data.coinMetadata!.decimals!)
+        // GraphQL `supply` is already expressed in the coin's smallest unit,
+        // matching the migrated JSON-RPC response. Do not scale it a second time.
+        return BigInt(data.coinMetadata!.supply!, radix: 10)!
     }
 
     /// Retrieves the annual percentage yield (APY) of validators.
@@ -1174,7 +1189,9 @@ public struct GraphQLSuiProvider: Provider {
             coinType: json["coinType"]["repr"].stringValue,
             coinObjectCount: 0,
             totalBalance: json["totalBalance"].stringValue,
-            lockedBalance: nil
+            lockedBalance: nil,
+            coinBalance: json["coinBalance"].string,
+            addressBalance: json["addressBalance"].string
         )
     }
 
@@ -1788,7 +1805,12 @@ public struct GraphQLSuiProvider: Provider {
     private static let balanceQuery = """
     query Balance($owner: SuiAddress!, $coinType: String!) {
       address(address: $owner) {
-        balance(coinType: $coinType) { coinType { repr } totalBalance }
+        balance(coinType: $coinType) {
+          coinType { repr }
+          totalBalance
+          coinBalance
+          addressBalance
+        }
       }
     }
     """

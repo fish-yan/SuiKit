@@ -71,6 +71,15 @@ enum GraphQLTransactionJSONEncoder {
             ])
         case .object(let object):
             return encode(object)
+        case .fundsWithdrawal(let withdrawal):
+            return .object([
+                "kind": .string("FUNDS_WITHDRAWAL"),
+                "fundsWithdrawal": .object([
+                    "amount": .string(String(withdrawal.amount)),
+                    "coinType": .string(try typeName(withdrawal.coinType)),
+                    "source": .string(withdrawal.source == .sender ? "SENDER" : "SPONSOR")
+                ])
+            ])
         }
     }
 
@@ -207,6 +216,26 @@ enum GraphQLTransactionJSONEncoder {
                 "kind": .string("EPOCH"),
                 "epoch": .string(String(epoch))
             ])
+        case let .validDuring(minEpoch, maxEpoch, minTimestamp, maxTimestamp, chain, nonce):
+            var value: [String: SuiJSON] = [
+                "kind": .string("VALID_DURING"),
+                "chain": .string(chain.base58EncodedString),
+                "nonce": .number(Double(nonce))
+            ]
+            if let minEpoch {
+                value["minEpoch"] = .string(String(minEpoch))
+            }
+            if let maxEpoch {
+                // gRPC Transaction JSON names the maximum epoch simply `epoch`.
+                value["epoch"] = .string(String(maxEpoch))
+            }
+            if let minTimestamp {
+                value["minTimestamp"] = .string(String(minTimestamp))
+            }
+            if let maxTimestamp {
+                value["maxTimestamp"] = .string(String(maxTimestamp))
+            }
+            return .object(value)
         }
     }
 

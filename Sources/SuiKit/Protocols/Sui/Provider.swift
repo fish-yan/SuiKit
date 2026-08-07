@@ -64,6 +64,11 @@ public protocol Provider {
 
     func getChainIdentifier() async throws -> String
 
+    /// Returns the full digest of the genesis checkpoint.
+    ///
+    /// Address-balance gas uses this value to prevent cross-chain replay.
+    func getGenesisCheckpointDigest() async throws -> CheckpointDigest
+
     func getCheckpoints(
         cursor: String?,
         limit: Int?,
@@ -152,6 +157,15 @@ public protocol Provider {
 
     func getBalance(
         account: any PublicKeyProtocol,
+        coinType: String?
+    ) async throws -> CoinBalance
+
+    /// Returns a balance for a canonical Sui address.
+    ///
+    /// Transaction construction uses this overload because it has an address
+    /// but does not retain the caller's public-key implementation.
+    func getBalance(
+        account: String,
         coinType: String?
     ) async throws -> CoinBalance
 

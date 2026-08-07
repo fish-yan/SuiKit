@@ -29,7 +29,7 @@ import BigInt
 /// A comprehensive zkLogin signer that can sign transactions and personal messages
 public class ZkLoginSigner {
     /// The Sui provider for network operations
-    private let provider: SuiProvider
+    private let provider: any Provider
 
     /// The ephemeral keypair used for signing
     private let ephemeralKeyPair: Account
@@ -51,7 +51,7 @@ public class ZkLoginSigner {
     ///   - userAddress: The user's zkLogin address
     ///   - graphQLClient: Optional GraphQL client for signature verification
     public init(
-        provider: SuiProvider,
+        provider: any Provider,
         ephemeralKeyPair: Account,
         zkLoginSignature: zkLoginSignature,
         userAddress: String,
@@ -141,11 +141,12 @@ public class ZkLoginSigner {
         var resp = try await provider.executeTransactionBlock(
             transactionBlock: bytes.bytes,
             signature: serializedSignature,
-            options: options
+            options: options,
+            requestType: nil
         )
 
         // Wait for confirmation
-        resp = try await provider.waitForTransaction(tx: resp.digest)
+        resp = try await provider.waitForTransaction(tx: resp.digest, options: nil)
         return resp
     }
 
@@ -160,11 +161,12 @@ public class ZkLoginSigner {
         var resp = try await provider.executeTransactionBlock(
             transactionBlock: transactionBlock,
             signature: serializedSignature,
-            options: options
+            options: options,
+            requestType: nil
         )
 
         // Wait for confirmation
-        resp = try await provider.waitForTransaction(tx: resp.digest)
+        resp = try await provider.waitForTransaction(tx: resp.digest, options: nil)
         return resp
     }
 

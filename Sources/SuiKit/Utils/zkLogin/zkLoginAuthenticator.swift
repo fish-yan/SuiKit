@@ -28,9 +28,9 @@ import BigInt
 
 /// Manages the zkLogin authentication flow
 public class ZkLoginAuthenticator {
-    private let provider: SuiProvider
+    private let provider: any Provider
 
-    public init(provider: SuiProvider) {
+    public init(provider: any Provider) {
         self.provider = provider
     }
 
@@ -87,7 +87,7 @@ public class ZkLoginAuthenticator {
     /// Get the current epoch from the network
     /// - Returns: The current epoch and related information
     public func getCurrentEpoch() async throws -> EpochInfo {
-        let systemState = try await provider.getSuiSystemState()
+        let systemState = try await provider.info()
         return EpochInfo(
             epoch: systemState["epoch"].uInt64Value,
             epochStartTimestampMs: systemState["epochStartTimestampMs"].uInt64Value,

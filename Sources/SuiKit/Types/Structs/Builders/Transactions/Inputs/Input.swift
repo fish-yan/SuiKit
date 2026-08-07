@@ -50,6 +50,9 @@ public struct Input: KeyProtocol {
         case "pure":
             guard let pure = PureCallArg(input: input) else { return nil }
             self.inputType = .pure(pure)
+        case "fundsWithdrawal":
+            guard let fundsWithdrawal = InputType.fromJSON(input) else { return nil }
+            self.inputType = fundsWithdrawal
         default:
             return nil
         }
@@ -62,6 +65,8 @@ public struct Input: KeyProtocol {
             return "pure"
         case .object:
             return "object"
+        case .fundsWithdrawal:
+            return "fundsWithdrawal"
         }
     }
 

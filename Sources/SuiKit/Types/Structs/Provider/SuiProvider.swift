@@ -237,6 +237,11 @@ public struct SuiProvider: Provider {
         return JSON(data)["result"].stringValue
     }
 
+    /// Returns the full digest of the genesis checkpoint.
+    public func getGenesisCheckpointDigest() async throws -> CheckpointDigest {
+        try await getCheckpoint(id: "0").digest
+    }
+
     /// Return a checkpoint.
     /// - Parameter id: Checkpoint identifier, can use either checkpoint digest, or checkpoint sequence number as input.
     /// - Throws: A `SuiError` if an error occurs during the JSON RPC call or if there are errors in the response data.
@@ -861,10 +866,18 @@ public struct SuiProvider: Provider {
         account: any PublicKeyProtocol,
         coinType: String? = nil
     ) async throws -> CoinBalance {
+        try await getBalance(account: try account.toSuiAddress(), coinType: coinType)
+    }
+
+    /// Return the total coin balance for a canonical Sui address.
+    public func getBalance(
+        account: String,
+        coinType: String? = nil
+    ) async throws -> CoinBalance {
         let data = try await JsonRpcClient.sendSuiJsonRpc(
             try self.getServerUrl(),
             SuiRequest("suix_getBalance", [
-                .string(try account.toSuiAddress()),
+                .string(account),
                 coinType.map { .string($0) } ?? .null
             ])
         )

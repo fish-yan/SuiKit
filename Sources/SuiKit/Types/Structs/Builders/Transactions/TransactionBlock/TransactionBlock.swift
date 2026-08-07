@@ -36,6 +36,11 @@ public class TransactionBlock {
     /// A boolean value indicating whether the block is prepared or not.
     private var isPreparred: Bool = false
 
+    /// Inputs created while migrating `transferObjects([tx.gas], ...)` for an
+    /// address-balance account. They are simulated with one MIST and filled with the
+    /// spendable address balance after the final gas budget is known.
+    private var addressBalanceMaxWithdrawalInputs = Set<UInt16>()
+
     /// A dictionary containing default offline limits with string keys and integer values.
     public static let defaultOfflineLimits: [String: UInt64] = [
         "maxPureArgumentSize": 16 * 1024,
@@ -212,6 +217,63 @@ public class TransactionBlock {
 
     public func pure(data: Data) throws -> TransactionBlockInput {
         return try self.input(type: .pure, value: .callArg(Input.init(type: .pure(PureCallArg(value: data)))))
+    }
+
+    /// Reserves a typed amount from the sender's address balance.
+    ///
+    /// Pass the returned input to `0x2::coin::redeem_funds` to create a
+    /// transferable `Coin<T>`. Address-balance gas is selected automatically
+    /// when the sender does not own a usable SUI coin object.
+    public func withdrawal(
+        amount: UInt64,
+        coinType: String,
+        source: FundsWithdrawalSource = .sender
+    ) throws -> TransactionBlockInput {
+        let type = try TypeTag(stringValue: coinType)
+        return try self.input(
+            type: .pure,
+            value: .callArg(
+                Input(type: .fundsWithdrawal(
+                    FundsWithdrawal(amount: amount, coinType: type, source: source)
+                ))
+            )
+        )
+    }
+
+    /// Transfers an amount directly from the sender's address balance.
+    ///
+    /// This is the address-balance equivalent of splitting `tx.gas` and is the
+    /// preferred API for SUI transfers when `getCoins` returns no `Coin<SUI>`
+    /// objects.
+    @discardableResult
+    public func transferFromAddressBalance(
+        amount: UInt64,
+        coinType: String = "0x2::sui::SUI",
+        toAddress: String
+    ) throws -> TransactionArgument {
+        let withdrawal = try self.withdrawal(amount: amount, coinType: coinType)
+        let coin = try self.moveCall(
+            target: "0x2::coin::redeem_funds",
+            arguments: [.input(withdrawal)],
+            typeArguments: [coinType]
+        )[0]
+        return try self.transferObject(objects: [coin], address: toAddress)
+    }
+
+    /// Transfers all spendable SUI from an address balance.
+    ///
+    /// The final amount is resolved during `build(_:)` as the current address
+    /// balance minus the simulated gas budget.
+    @discardableResult
+    public func transferMaxFromAddressBalance(toAddress: String) throws -> TransactionArgument {
+        let withdrawal = try self.withdrawal(amount: 1, coinType: "0x2::sui::SUI")
+        self.addressBalanceMaxWithdrawalInputs.insert(withdrawal.index)
+        let coin = try self.moveCall(
+            target: "0x2::coin::redeem_funds",
+            arguments: [.input(withdrawal)],
+            typeArguments: ["0x2::sui::SUI"]
+        )[0]
+        return try self.transferObject(objects: [coin], address: toAddress)
     }
 
     /// Appends a `SuiTransaction` object to the `blockData.builder.transactions` array and
@@ -582,10 +644,161 @@ public class TransactionBlock {
         }
 
         guard !paymentCoins.isEmpty else {
-            throw SuiError.customError(message: "Owner does not have payment coins")
+            try self.replaceSimpleGasSplitWithAddressBalanceWithdrawal()
+            try await self.prepareAddressBalanceGas(provider: provider)
+            return
         }
 
         try self.setGasPayment(payments: paymentCoins)
+    }
+
+    /// Migrates the legacy `splitCoins(tx.gas, [amount])` SUI-transfer pattern.
+    ///
+    /// Address-balance gas has no mutable gas coin, so a single fixed-amount
+    /// split is replaced in-place with `coin::redeem_funds<SUI>(withdrawal)`.
+    /// The command index is preserved, keeping subsequent `Result` arguments
+    /// valid. The common `transferObjects([tx.gas], recipient)` max pattern is
+    /// converted to a one-MIST withdrawal resolved after gas simulation.
+    private func replaceSimpleGasSplitWithAddressBalanceWithdrawal() throws {
+        for index in self.blockData.builder.transactions.indices {
+            guard case .splitCoins(let split) = self.blockData.builder.transactions[index],
+                  case .gasCoin = split.coin,
+                  split.amounts.count == 1,
+                  case .input(let amountInput) = split.amounts[0],
+                  let value = self.blockData.builder.inputs[safe: Int(amountInput.index)]?.value,
+                  case .callArg(let callArg) = value,
+                  case .pure(let pure) = callArg.inputType,
+                  pure.value.count == MemoryLayout<UInt64>.size
+            else {
+                continue
+            }
+
+            let amount = pure.value.enumerated().reduce(UInt64.zero) { value, element in
+                value | (UInt64(element.element) << UInt64(element.offset * 8))
+            }
+            let withdrawal = FundsWithdrawal(
+                amount: amount,
+                coinType: try TypeTag(stringValue: "0x2::sui::SUI")
+            )
+            self.blockData.builder.inputs[Int(amountInput.index)].value = .callArg(
+                Input(type: .fundsWithdrawal(withdrawal))
+            )
+            self.blockData.builder.transactions[index] = .moveCall(
+                try Transactions.moveCall(
+                    target: "0x2::coin::redeem_funds",
+                    typeArguments: ["0x2::sui::SUI"],
+                    arguments: [.input(amountInput)]
+                )
+            )
+        }
+
+        let maxTransfers = self.blockData.builder.transactions.enumerated().compactMap { index, transaction -> (Int, TransferObjectsTransaction)? in
+            guard case .transferObjects(let transfer) = transaction,
+                  transfer.objects.count == 1,
+                  transfer.objects[0].kind == .gasCoin
+            else {
+                return nil
+            }
+            return (index, transfer)
+        }
+
+        for (index, transfer) in maxTransfers {
+            let withdrawal = try self.withdrawal(amount: 1, coinType: "0x2::sui::SUI")
+            self.addressBalanceMaxWithdrawalInputs.insert(withdrawal.index)
+            self.blockData.builder.transactions[index] = .moveCall(
+                try Transactions.moveCall(
+                    target: "0x2::coin::redeem_funds",
+                    typeArguments: ["0x2::sui::SUI"],
+                    arguments: [.input(withdrawal)]
+                )
+            )
+            self.blockData.builder.transactions.append(
+                .transferObjects(
+                    TransferObjectsTransaction(
+                        objects: [.result(Result(index: UInt16(index)))],
+                        address: transfer.address
+                    )
+                )
+            )
+        }
+
+        for transaction in self.blockData.builder.transactions {
+            switch transaction {
+            case .splitCoins(let split) where split.coin.kind == .gasCoin:
+                throw SuiError.customError(
+                    message: "Address-balance transfers require one explicit amount; use transferFromAddressBalance"
+                )
+            case .transferObjects(let transfer) where transfer.objects.contains(where: { $0.kind == .gasCoin }):
+                throw SuiError.customError(
+                    message: "Address-balance max transfer must contain only tx.gas"
+                )
+            default:
+                continue
+            }
+        }
+    }
+
+    /// Configures address-balance gas when the sender has no SUI coin objects.
+    private func prepareAddressBalanceGas(provider: Provider) async throws {
+        guard let genesisDigest = try await provider.getGenesisCheckpointDigest().base58DecodedData,
+              genesisDigest.count == 32
+        else {
+            throw SuiError.customError(message: "Invalid genesis checkpoint digest")
+        }
+
+        let systemState = try await provider.info()
+        guard let epoch = systemState["epoch"].uInt64 else {
+            throw SuiError.customError(message: "Missing current epoch")
+        }
+        try self.setGasPayment(payments: [])
+        self.setExpiration(
+            expiration: .validDuring(
+                minEpoch: epoch,
+                maxEpoch: epoch + 1,
+                minTimestamp: nil,
+                maxTimestamp: nil,
+                chain: [UInt8](genesisDigest),
+                nonce: UInt32.random(in: UInt32.min...UInt32.max)
+            )
+        )
+    }
+
+    /// Resolves max-transfer withdrawals after gas simulation.
+    private func resolveAddressBalanceMaxWithdrawals(provider: Provider) async throws {
+        guard !self.addressBalanceMaxWithdrawalInputs.isEmpty else { return }
+        guard let sender = self.blockData.builder.sender?.hex() else {
+            throw SuiError.customError(message: "Sender is missing")
+        }
+        guard let budget = self.blockData.builder.gasConfig.budget.flatMap(UInt64.init) else {
+            throw SuiError.customError(message: "Gas budget is missing")
+        }
+
+        let balance = try await provider.getBalance(account: sender, coinType: "0x2::sui::SUI")
+        guard let addressBalance = balance.addressBalance.flatMap(UInt64.init) else {
+            throw SuiError.customError(
+                message: "Provider did not return addressBalance required for address-balance max transfer"
+            )
+        }
+        guard addressBalance > budget else {
+            throw SuiError.customError(message: "Address balance is insufficient after reserving gas")
+        }
+
+        let amount = addressBalance - budget
+        for index in self.addressBalanceMaxWithdrawalInputs {
+            guard let input = self.blockData.builder.inputs[safe: Int(index)] else {
+                throw SuiError.customError(message: "Missing address-balance max-transfer input")
+            }
+            guard case .callArg(let callArgument) = input.value,
+                  case .fundsWithdrawal(let withdrawal) = callArgument.inputType
+            else {
+                throw SuiError.customError(message: "Invalid address-balance max-transfer input")
+            }
+            self.blockData.builder.inputs[Int(index)].value = .callArg(
+                Input(type: .fundsWithdrawal(
+                    FundsWithdrawal(amount: amount, coinType: withdrawal.coinType, source: withdrawal.source)
+                ))
+            )
+        }
     }
 
     /// Prepares gas price for transactions.
@@ -755,7 +968,7 @@ public class TransactionBlock {
                 // Update the input value in the objectsToResolve array based on the initial shared version or object reference
                 guard let initialSharedVersion = object.getSharedObjectInitialVersion() else {
                     guard let objRef = object.getObjectReference() else { continue }
-                    guard let objectData = object.data else { continue }
+                    guard object.data != nil else { continue }
                     
                     let isReceiving = try
                     objectToResolve.normalizedType?.extractStructTag()?.address.hex() == Inputs.normalizeSuiAddress(value: "0x2") &&
@@ -904,6 +1117,8 @@ public class TransactionBlock {
                         BigInt(baseComputationCostWithOverhead)
                 )
             }
+
+            try await self.resolveAddressBalanceMaxWithdrawals(provider: provider)
         }
 
         self.isPreparred = true

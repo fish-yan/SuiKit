@@ -35,6 +35,9 @@ public indirect enum InputType: KeyProtocol {
     /// Represents an object argument, meaning the argument includes an object reference.
     case object(ObjectArg)
 
+    /// Reserves funds from an address balance for use by a programmable transaction.
+    case fundsWithdrawal(FundsWithdrawal)
+
     // TODO: Implement Object Vector type
 
     /// A static function to create an `InputType` instance from a JSON object.
@@ -49,6 +52,15 @@ public indirect enum InputType: KeyProtocol {
         case "object":
             guard let object = ObjectArg.fromJSON(input) else { return nil }
             return .object(object)
+        case "fundsWithdrawal":
+            guard
+                let amount = input["amount"].uInt64,
+                let coinType = try? TypeTag(stringValue: input["coinType"].stringValue)
+            else {
+                return nil
+            }
+            let source: FundsWithdrawalSource = input["source"].stringValue == "SPONSOR" ? .sponsor : .sender
+            return .fundsWithdrawal(FundsWithdrawal(amount: amount, coinType: coinType, source: source))
         default:
             return nil
         }
@@ -66,6 +78,9 @@ public indirect enum InputType: KeyProtocol {
         case .object(let object):
             try serializer.uleb128(UInt(1))
             try Serializer._struct(serializer, value: object)
+        case .fundsWithdrawal(let withdrawal):
+            try serializer.uleb128(UInt(2))
+            try Serializer._struct(serializer, value: withdrawal)
         }
     }
 
@@ -81,6 +96,8 @@ public indirect enum InputType: KeyProtocol {
             return .pure(try Deserializer._struct(deserializer))
         case 1:
             return .object(try Deserializer._struct(deserializer))
+        case 2:
+            return .fundsWithdrawal(try Deserializer._struct(deserializer))
         default:
             throw SuiError.customError(message: "Unable to Deserialize")
         }
