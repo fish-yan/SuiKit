@@ -1227,7 +1227,7 @@ public struct GraphQLSuiProvider: Provider {
     }
 
     private func coin(_ json: JSON) throws -> CoinStruct {
-        let moveObject = json["asMoveObject"]
+        let moveObject = json
         let coinType = moveObject["contents"]["type"]["repr"].stringValue
         let typeArgument = coinType
             .split(separator: "<", maxSplits: 1)
@@ -1738,6 +1738,11 @@ public struct GraphQLSuiProvider: Provider {
     asMoveObject { hasPublicTransfer moveObjectBcs contents { json type { repr } } }
     """
 
+    private static let moveObjectFields = """
+    address version digest storageRebate previousTransaction { digest }
+    hasPublicTransfer moveObjectBcs contents { json type { repr } }
+    """
+
     private static let objectQuery = """
     query Object($id: SuiAddress!) { object(address: $id) { \(objectFields) } }
     """
@@ -1750,10 +1755,7 @@ public struct GraphQLSuiProvider: Provider {
 
     private static let multiGetObjectsQuery = """
     query MultiGetObjects($keys: [ObjectKey!]!) {
-      multiGetObjects(keys: $keys) {
-        address version digest storageRebate previousTransaction { digest }
-        hasPublicTransfer moveObjectBcs contents { json type { repr } }
-      }
+      multiGetObjects(keys: $keys) { \(objectFields) }
     }
     """
 
@@ -1762,7 +1764,7 @@ public struct GraphQLSuiProvider: Provider {
       address(address: $owner) {
         objects(first: $first, after: $after, filter: $filter) {
           pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
-          nodes { \(objectFields) }
+          nodes { \(moveObjectFields) }
         }
       }
     }
@@ -1798,7 +1800,7 @@ public struct GraphQLSuiProvider: Provider {
           pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
           nodes {
             address version digest previousTransaction { digest }
-            asMoveObject { contents { json type { repr } } }
+            contents { json type { repr } }
           }
         }
       }
