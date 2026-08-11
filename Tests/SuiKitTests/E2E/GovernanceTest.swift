@@ -46,8 +46,8 @@ final class GovernanceTest: XCTestCase {
         return toolBox
     }
 
-    private func addStake(_ client: SuiProvider, _ account: Account) async throws -> SuiTransactionBlockResponse {
-        let coins = try await client.getCoins(account: try account.publicKey.toSuiAddress(), coinType: "0x2::sui::SUI")
+    private func addStake(_ client: GraphQLSuiProvider, _ account: Account) async throws -> SuiTransactionBlockResponse {
+        let coins = try await client.getCoins(owner: try account.publicKey.toSuiAddress(), coinType: "0x2::sui::SUI")
         let system = try await client.info()
         let activeValidator = system["activeValidators"].arrayValue[0]["suiAddress"].stringValue
         var tx = try TransactionBlock()
@@ -66,10 +66,9 @@ final class GovernanceTest: XCTestCase {
         )
         try tx.setGasPayment(payments: coinObjects.map { $0.getObjectReference()! })
         let options = SuiTransactionBlockResponseOptions(showEffects: true)
-        let res = try await client.signAndExecuteTransactionBlock(
-            transactionBlock: &tx,
-            signer: account,
-            options: options
+        let res = try await client.signAndExecuteTransaction(
+            transaction: &tx,
+            signer: account
         )
         return try await client.waitForTransaction(tx: res.digest, options: options)
     }

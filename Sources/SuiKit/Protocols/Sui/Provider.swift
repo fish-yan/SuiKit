@@ -30,36 +30,31 @@ import SwiftyJSON
 public protocol Provider {
     var connection: any ConnectionProtocol { get set }
 
-    func devInspectTransactionBlock(
-        transactionBlock: inout TransactionBlock,
-        sender: Account,
-        gasPrice: Int?,
-        epoch: String?
+    func inspectTransaction(
+        transaction: inout TransactionBlock,
+        sender: String,
+        gasPrice: Int?
     ) async throws -> DevInspectResults?
 
-    func dryRunTransactionBlock(
-        transactionBlock: [UInt8]
+    /// Simulates a fully typed transaction through the current transport.
+    ///
+    /// GraphQL and gRPC accept transaction JSON for simulation. Keeping this
+    /// typed avoids ambiguous BCS inputs such as TransactionKind or an intent
+    /// message being decoded as TransactionData.
+    func simulateTransaction(
+        transaction: TransactionDataV1,
+        checksEnabled: Bool,
+        doGasSelection: Bool
     ) async throws -> SuiTransactionBlockResponse
 
-    func signAndExecuteTransactionBlock(
-        transactionBlock: inout TransactionBlock,
-        signer: Account,
-        options: SuiTransactionBlockResponseOptions?,
-        requestType: SuiRequestType?
+    func signAndExecuteTransaction(
+        transaction: inout TransactionBlock,
+        signer: Account
     ) async throws -> SuiTransactionBlockResponse
 
-    func executeTransactionBlock(
-        transactionBlock: String,
-        signature: String,
-        options: SuiTransactionBlockResponseOptions?,
-        requestType: SuiRequestType?
-    ) async throws -> SuiTransactionBlockResponse
-
-    func executeTransactionBlock(
-        transactionBlock: [UInt8],
-        signature: String,
-        options: SuiTransactionBlockResponseOptions?,
-        requestType: SuiRequestType?
+    func executeTransaction(
+        transactionData: [UInt8],
+        signature: String
     ) async throws -> SuiTransactionBlockResponse
 
     func getChainIdentifier() async throws -> String
@@ -146,26 +141,17 @@ public protocol Provider {
     ) async throws -> [ObjectRead]
 
     func getAllBalances(
-        account: Account
+        owner: String
     ) async throws -> [CoinBalance]
 
     func getAllCoins(
-        account: any PublicKeyProtocol,
+        owner: String,
         cursor: String?,
         limit: UInt?
     ) async throws -> PaginatedCoins
 
     func getBalance(
-        account: any PublicKeyProtocol,
-        coinType: String?
-    ) async throws -> CoinBalance
-
-    /// Returns a balance for a canonical Sui address.
-    ///
-    /// Transaction construction uses this overload because it has an address
-    /// but does not retain the caller's public-key implementation.
-    func getBalance(
-        account: String,
+        owner: String,
         coinType: String?
     ) async throws -> CoinBalance
 
@@ -174,7 +160,7 @@ public protocol Provider {
     ) async throws -> SuiCoinMetadata
 
     func getCoins(
-        account: String,
+        owner: String,
         coinType: String?,
         cursor: String?,
         limit: UInt?

@@ -50,7 +50,7 @@ final class CheckpointTest: XCTestCase {
 
     func testThatCheckpointCanBeReceivedById() async throws {
         let toolBox = try self.fetchToolBox()
-        let resp = try await toolBox.client.getCheckpoint(id: "0")
+        let resp = try await toolBox.client.getCheckpoint(sequenceNumber: 0)
         XCTAssertGreaterThan(resp.digest.count, 0)
         XCTAssertGreaterThan(resp.transactions.count, 0)
         XCTAssertNotNil(resp.epoch)
@@ -62,9 +62,9 @@ final class CheckpointTest: XCTestCase {
 
     func testThatCheckpointContentsAreReceivedByDigest() async throws {
         let toolBox = try self.fetchToolBox()
-        let checkpointResp = try await toolBox.client.getCheckpoint(id: "0")
+        let checkpointResp = try await toolBox.client.getCheckpoint(sequenceNumber: 0)
         let digest = checkpointResp.digest
-        let resp = try await toolBox.client.getCheckpoint(id: digest)
+        let resp = try await toolBox.client.getCheckpoint(digest: digest)
         XCTAssertEqual(resp, checkpointResp)
     }
 

@@ -53,10 +53,9 @@ final class ReadTransactionTest: XCTestCase {
         var tx = try TransactionBlock()
         let coin = try tx.splitCoin(coin: tx.gas, amounts: [tx.pure(value: .number(1))])
         _ = try tx.transferObject(objects: [coin], address: try toolBox.address())
-        return try await toolBox.client.signAndExecuteTransactionBlock(
-            transactionBlock: &tx,
-            signer: toolBox.account,
-            requestType: .waitforEffectsCert
+        return try await toolBox.client.signAndExecuteTransaction(
+            transaction: &tx,
+            signer: toolBox.account
         )
     }
 

@@ -99,7 +99,7 @@ final class KioskTest: XCTestCase {
         }
 
         try kioskTx.finalize()
-        _ = try await self.toolBox!.executeTransactionBlock(txb: &txb)
+        _ = try await self.toolBox!.executeTransaction(txb: &txb)
     }
 
     func testThatPurchasingAndResolvingItemsUnderAllRuleSetsWorksAsIntended() async throws {
@@ -150,7 +150,7 @@ final class KioskTest: XCTestCase {
             .removePersonalKioskRule()
             .withdraw(address: try self.toolBox!.address())
 
-        _ = try await self.toolBox!.executeTransactionBlock(txb: &txb)
+        _ = try await self.toolBox!.executeTransaction(txb: &txb)
     }
 
     func testThatFetchingKiosksByIdWorksAsIntended() async throws {

@@ -54,24 +54,6 @@ public struct CoinBalance: Equatable {
     /// Locked balance is the portion of the total balance that is restricted or not readily available for use.
     public let lockedBalance: LockedBalance?
 
-    public init(graphql: GetBalanceQuery.Data.Address.Balance) throws {
-        self.coinType = try StructTag.fromStr(graphql.coinType.repr)
-        self.coinObjectCount = Int(graphql.coinObjectCount!)!
-        self.totalBalance = graphql.totalBalance!
-        self.coinBalance = nil
-        self.addressBalance = nil
-        self.lockedBalance = nil
-    }
-
-    public init(graphql: GetAllBalancesQuery.Data.Address.Balances.Node) throws {
-        self.coinType = try StructTag.fromStr(graphql.coinType.repr)
-        self.coinObjectCount = Int(graphql.coinObjectCount!)!
-        self.totalBalance = graphql.totalBalance!
-        self.coinBalance = nil
-        self.addressBalance = nil
-        self.lockedBalance = nil
-    }
-
     public init(
         coinType: String,
         coinObjectCount: Int,

@@ -53,14 +53,14 @@ final class DevInspectTest: XCTestCase {
     }
 
     private func validateDevInspectTransaction(
-        _ client: SuiProvider,
+        _ client: GraphQLSuiProvider,
         _ signer: Account,
         _ transactionBlock: inout TransactionBlock,
         _ status: ExecutionStatusType
     ) async throws {
-        let result = try await client.devInspectTransactionBlock(
-            transactionBlock: &transactionBlock,
-            sender: signer
+        let result = try await client.inspectTransaction(
+            transaction: &transactionBlock,
+            sender: try signer.address()
         )
         guard status == result?.effects.status.status else {
             XCTFail("Status does not match")

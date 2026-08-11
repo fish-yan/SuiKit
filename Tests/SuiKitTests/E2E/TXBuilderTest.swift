@@ -86,14 +86,13 @@ final class TXBuilderTest: XCTestCase {
         return sharedObjectId
     }
 
-    private func validateTransaction(client: SuiProvider, account: Account, tx: inout TransactionBlock) async throws {
+    private func validateTransaction(client: GraphQLSuiProvider, account: Account, tx: inout TransactionBlock) async throws {
         try tx.setSenderIfNotSet(sender: try account.publicKey.toSuiAddress())
         let localDigest = try await tx.getDigest(client)
         let options = SuiTransactionBlockResponseOptions(showEffects: true)
-        var result = try await client.signAndExecuteTransactionBlock(
-            transactionBlock: &tx,
-            signer: account,
-            options: options
+        var result = try await client.signAndExecuteTransaction(
+            transaction: &tx,
+            signer: account
         )
         result = try await self.fetchToolBox().client.waitForTransaction(tx: localDigest, options: options)
         XCTAssertEqual(localDigest, result.digest)

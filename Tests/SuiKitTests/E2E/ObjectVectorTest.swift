@@ -58,10 +58,9 @@ final class ObjectVectorTest: XCTestCase {
             target: "\(try self.fetchPackageId())::entry_point_vector::mint",
             arguments: [.input(tx.pure(value: .number(UInt64(val))))]
         )
-        let result = try await toolBox.client.signAndExecuteTransactionBlock(
-            transactionBlock: &tx,
-            signer: toolBox.account,
-            options: SuiTransactionBlockResponseOptions(showEffects: true)
+        let result = try await toolBox.client.signAndExecuteTransaction(
+            transaction: &tx,
+            signer: toolBox.account
         )
         guard
             result.effects?.status.status == .success,
@@ -83,10 +82,9 @@ final class ObjectVectorTest: XCTestCase {
             target: "\(try self.fetchPackageId())::entry_point_vector::two_obj_vec_destroy",
             arguments: [vec]
         )
-        let result = try await toolBox.client.signAndExecuteTransactionBlock(
-            transactionBlock: &tx,
-            signer: toolBox.account,
-            options: SuiTransactionBlockResponseOptions(showEffects: true)
+        let result = try await toolBox.client.signAndExecuteTransaction(
+            transaction: &tx,
+            signer: toolBox.account
         )
         guard result.effects?.status.status == .success else {
             XCTFail("Transaction Failed")
@@ -143,10 +141,9 @@ final class ObjectVectorTest: XCTestCase {
             typeArguments: ["0x2::sui::SUI"]
         )
         try tx.setGasPayment(payments: [coin.toSuiObjectRef()])
-        let result = try await toolBox.client.signAndExecuteTransactionBlock(
-            transactionBlock: &tx,
-            signer: toolBox.account,
-            options: SuiTransactionBlockResponseOptions(showEffects: true)
+        let result = try await toolBox.client.signAndExecuteTransaction(
+            transaction: &tx,
+            signer: toolBox.account
         )
         guard result.effects?.status.status == .success else {
             XCTFail("Transaction Failed")

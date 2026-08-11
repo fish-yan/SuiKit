@@ -62,10 +62,9 @@ final class EntryPointStringTest: XCTestCase {
             ]
         )
         let options = SuiTransactionBlockResponseOptions(showEffects: true)
-        var result = try await self.fetchToolBox().client.signAndExecuteTransactionBlock(
-            transactionBlock: &tx,
-            signer: try self.fetchToolBox().account,
-            options: options
+        var result = try await self.fetchToolBox().client.signAndExecuteTransaction(
+            transaction: &tx,
+            signer: try self.fetchToolBox().account
         )
         result = try await self.fetchToolBox().client.waitForTransaction(tx: result.digest, options: options)
         guard result.effects?.status.status == .success else {
@@ -84,10 +83,9 @@ final class EntryPointStringTest: XCTestCase {
             ]
         )
         let options = SuiTransactionBlockResponseOptions(showEffects: true)
-        var result = try await self.fetchToolBox().client.signAndExecuteTransactionBlock(
-            transactionBlock: &tx,
-            signer: try self.fetchToolBox().account,
-            options: options
+        var result = try await self.fetchToolBox().client.signAndExecuteTransaction(
+            transaction: &tx,
+            signer: try self.fetchToolBox().account
         )
         result = try await self.fetchToolBox().client.waitForTransaction(
             tx: result.digest,

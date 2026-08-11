@@ -76,25 +76,25 @@ final class CoinReadTest: XCTestCase {
         let toolBox = try self.fetchToolBox()
         let publisherToolBox = try self.fetchPublisherToolBox()
 
-        let suiCoin = try await toolBox.client.getCoins(account: try toolBox.account.publicKey.toSuiAddress())
+        let suiCoin = try await toolBox.client.getCoins(owner: try toolBox.account.publicKey.toSuiAddress())
         XCTAssertEqual(suiCoin.data.count, 5)
 
         let testCoins = try await publisherToolBox.client.getCoins(
-            account: try publisherToolBox.account.publicKey.toSuiAddress(),
+            owner: try publisherToolBox.account.publicKey.toSuiAddress(),
             coinType: try self.fetchTestType()
         )
         XCTAssertEqual(testCoins.data.count, 2)
 
-        let allCoins = try await toolBox.client.getAllCoins(account: toolBox.account.publicKey)
+        let allCoins = try await toolBox.client.getAllCoins(owner: try toolBox.account.address())
         XCTAssertEqual(allCoins.data.count, 5)
         XCTAssertFalse(allCoins.hasNextPage!)
 
-        let publisherAllCoins = try await publisherToolBox.client.getAllCoins(account: publisherToolBox.account.publicKey)
+        let publisherAllCoins = try await publisherToolBox.client.getAllCoins(owner: try publisherToolBox.account.address())
         XCTAssertEqual(publisherAllCoins.data.count, 3)
         XCTAssertFalse(publisherAllCoins.hasNextPage!)
 
         let someSuiCoins = try await toolBox.client.getCoins(
-            account: try toolBox.account.publicKey.toSuiAddress(),
+            owner: try toolBox.account.publicKey.toSuiAddress(),
             coinType: nil,
             cursor: nil,
             limit: 3
@@ -107,20 +107,20 @@ final class CoinReadTest: XCTestCase {
         let toolBox = try self.fetchToolBox()
         let publisherToolBox = try self.fetchPublisherToolBox()
 
-        let suiBalance = try await toolBox.client.getBalance(account: toolBox.account.publicKey)
+        let suiBalance = try await toolBox.client.getBalance(owner: try toolBox.account.address())
         XCTAssertEqual(suiBalance.coinType, try StructTag.fromStr("0x2::sui::SUI"))
         XCTAssertEqual(suiBalance.coinObjectCount, 5)
         XCTAssertGreaterThan(Int(suiBalance.totalBalance) ?? 0, 0)
 
         let testBalance = try await publisherToolBox.client.getBalance(
-            account: publisherToolBox.account.publicKey,
+            owner: try publisherToolBox.account.address(),
             coinType: try self.fetchTestType()
         )
         XCTAssertEqual(testBalance.coinType, try StructTag.fromStr(try self.fetchTestType()))
         XCTAssertEqual(testBalance.coinObjectCount, 2)
         XCTAssertEqual(Int(testBalance.totalBalance) ?? -1, 11)
 
-        let allBalances = try await publisherToolBox.client.getAllBalances(account: publisherToolBox.account)
+        let allBalances = try await publisherToolBox.client.getAllBalances(owner: try publisherToolBox.account.address())
         XCTAssertEqual(allBalances.count, 2)
     }
 

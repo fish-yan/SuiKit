@@ -106,24 +106,19 @@ public struct RawSigner: SignerWithProviderProtocol {
         )
     }
 
-    /// Signs and executes a transaction block.
-    /// - Parameters:
-    ///   - transactionBlock: The `TransactionBlock` instance to be signed and executed.
-    ///   - options: Optional `SuiTransactionBlockResponseOptions` instance.
-    ///   - requestType: Optional `SuiRequestType` instance.
+    /// Signs and executes a transaction.
     /// - Returns: An instance of `SuiTransactionBlockResponse` representing the response to the transaction block execution.
     /// - Throws: An error if the transaction block execution fails.
-    public func signAndExecuteTransactionBlock(
-        _ transactionBlock: inout TransactionBlock,
-        _ options: SuiTransactionBlockResponseOptions? = nil,
-        _ requestType: SuiRequestType? = nil
+    public func signAndExecuteTransaction(
+        _ transaction: inout TransactionBlock
     ) async throws -> SuiTransactionBlockResponse {
-        let signedTxBlock = try await self.signTransactionBlock(transactionBlock: &transactionBlock)
-        return try await self.provider.executeTransactionBlock(
-            transactionBlock: signedTxBlock.transactionBlockBytes,
-            signature: signedTxBlock.signature,
-            options: options,
-            requestType: requestType
+        let signedTxBlock = try await self.signTransactionBlock(transactionBlock: &transaction)
+        guard let transactionData = Data.fromBase64(signedTxBlock.transactionBlockBytes) else {
+            throw SuiError.customError(message: "Unable to decode signed transaction data")
+        }
+        return try await self.provider.executeTransaction(
+            transactionData: transactionData.bytes,
+            signature: signedTxBlock.signature
         )
     }
 
@@ -144,31 +139,18 @@ public struct RawSigner: SignerWithProviderProtocol {
         return try TransactionBlockDataBuilder.getDigestFromBytes(bytes: tx)
     }
 
-    /// Performs a dry-run of the provided transaction block.
-    /// - Parameter transactionBlock: A reference to a `TransactionBlock` instance to be dry-run.
-    /// - Returns: A `SuiTransactionBlockResponse` instance representing the response of the dry-run.
-    /// - Throws: An error if the dry-run process fails.
-    public func dryRunTransactionBlock(_ transactionBlock: inout TransactionBlock) async throws -> SuiTransactionBlockResponse {
+    /// Simulates a transaction block without committing it to the chain.
+    ///
+    /// Simulation receives typed transaction data, never an ambiguous BCS byte
+    /// sequence that might represent TransactionKind or an intent message.
+    public func simulateTransactionBlock(_ transactionBlock: inout TransactionBlock) async throws -> SuiTransactionBlockResponse {
         try transactionBlock.setSenderIfNotSet(sender: try self.getAddress())
-        let dryRunTxBytes = try await transactionBlock.build(self.provider)
-        return try await self.provider.dryRunTransactionBlock(transactionBlock: [UInt8](dryRunTxBytes))
-    }
-
-    /// Performs a dry-run of the provided transaction block.
-    /// - Parameter transactionBlock: A `String` representing the base64-encoded transaction block to be dry-run.
-    /// - Returns: A `SuiTransactionBlockResponse` instance representing the response of the dry-run.
-    /// - Throws: An error if the dry-run process fails or if the input string is not valid base64.
-    public func dryRunTransactionBlock(_ transactionBlock: String) async throws -> SuiTransactionBlockResponse {
-        guard let dryRunTxBytes = Data.fromBase64(transactionBlock) else { throw SuiError.customError(message: "Failed data") }
-        return try await self.provider.dryRunTransactionBlock(transactionBlock: [UInt8](dryRunTxBytes))
-    }
-
-    /// Performs a dry-run of the provided transaction block.
-    /// - Parameter transactionBlock: A `Data` instance representing the transaction block to be dry-run.
-    /// - Returns: A `SuiTransactionBlockResponse` instance representing the response of the dry-run.
-    /// - Throws: An error if the dry-run process fails.
-    public func dryRunTransactionBlock(_ transactionBlock: Data) async throws -> SuiTransactionBlockResponse {
-        return try await self.provider.dryRunTransactionBlock(transactionBlock: [UInt8](transactionBlock))
+        _ = try await transactionBlock.build(provider)
+        return try await provider.simulateTransaction(
+            transaction: try transactionBlock.blockData.buildTransactionData(),
+            checksEnabled: true,
+            doGasSelection: false
+        )
     }
 
     // TODO: Implement GetGasCostEstimation

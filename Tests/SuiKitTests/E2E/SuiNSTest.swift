@@ -37,7 +37,7 @@ final class SuiNSTest: XCTestCase {
 
     override func setUp() async throws {
         self.client = SuiNSClient(
-            suiClient: SuiProvider(
+            suiClient: GraphQLSuiProvider(
                 connection: TestnetConnection()
             ),
             contractObject: SuiNSContract(

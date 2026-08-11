@@ -617,7 +617,7 @@ public class TransactionBlock {
         }
 
         let coins = try await provider.getCoins(
-            account: gasOwner,
+            owner: gasOwner,
             coinType: "0x2::sui::SUI",
             cursor: nil,
             limit: nil
@@ -773,7 +773,7 @@ public class TransactionBlock {
             throw SuiError.customError(message: "Gas budget is missing")
         }
 
-        let balance = try await provider.getBalance(account: sender, coinType: "0x2::sui::SUI")
+        let balance = try await provider.getBalance(owner: sender, coinType: "0x2::sui::SUI")
         guard let addressBalance = balance.addressBalance.flatMap(UInt64.init) else {
             throw SuiError.customError(
                 message: "Provider did not return addressBalance required for address-balance max transfer"
@@ -1090,8 +1090,13 @@ public class TransactionBlock {
                     builder: SerializedTransactionDataBuilder(gasConfig: gasConfig)
                 )
 
-                let dryRunResult = try await provider.dryRunTransactionBlock(
-                    transactionBlock: [UInt8](blockData.build(overrides: txBlockDataBuilder))
+                let simulation = try blockData.buildTransactionData(
+                    overrides: txBlockDataBuilder
+                )
+                let dryRunResult = try await provider.simulateTransaction(
+                    transaction: simulation,
+                    checksEnabled: true,
+                    doGasSelection: false
                 )
 
                 guard dryRunResult.effects?.status.status != .failure else {

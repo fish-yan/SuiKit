@@ -59,7 +59,10 @@ public enum TransactionExpiration: KeyProtocol {
             try serializer._optional(maxEpoch, Serializer.u64)
             try serializer._optional(minTimestamp, Serializer.u64)
             try serializer._optional(maxTimestamp, Serializer.u64)
-            serializer.fixedBytes(Data(chain))
+            // `chain` is Sui's `ObjectDigest`, whose BCS representation is a
+            // byte vector (length prefix + 32 bytes), not a fixed byte array.
+            // For a genesis digest the prefix is `0x20`.
+            try Serializer.toBytes(serializer, Data(chain))
             try Serializer.u32(serializer, nonce)
         }
     }
@@ -75,12 +78,20 @@ public enum TransactionExpiration: KeyProtocol {
                 try Deserializer.u64(deserializer)
             )
         case 2:
+            let minEpoch = try deserializer._optional(valueDecoder: Deserializer.u64)
+            let maxEpoch = try deserializer._optional(valueDecoder: Deserializer.u64)
+            let minTimestamp = try deserializer._optional(valueDecoder: Deserializer.u64)
+            let maxTimestamp = try deserializer._optional(valueDecoder: Deserializer.u64)
+            let chain = [UInt8](try Deserializer.toBytes(deserializer))
+            guard chain.count == 32 else {
+                throw SuiError.customError(message: "Address-balance gas requires a 32-byte genesis checkpoint digest")
+            }
             return .validDuring(
-                minEpoch: try deserializer._optional(valueDecoder: Deserializer.u64),
-                maxEpoch: try deserializer._optional(valueDecoder: Deserializer.u64),
-                minTimestamp: try deserializer._optional(valueDecoder: Deserializer.u64),
-                maxTimestamp: try deserializer._optional(valueDecoder: Deserializer.u64),
-                chain: [UInt8](try deserializer.fixedBytes(length: 32)),
+                minEpoch: minEpoch,
+                maxEpoch: maxEpoch,
+                minTimestamp: minTimestamp,
+                maxTimestamp: maxTimestamp,
+                chain: chain,
                 nonce: try Deserializer.u32(deserializer)
             )
         default:

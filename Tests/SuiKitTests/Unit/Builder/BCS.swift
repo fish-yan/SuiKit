@@ -98,6 +98,82 @@ final class BCSTest: XCTestCase {
         XCTAssertEqual(nonce, 9)
     }
 
+    func testValidDuringTransactionDataContainsFullDigestAndNonce() throws {
+        let chain = Array(UInt8(0)...UInt8(31))
+        let transaction = TransactionData.V1(
+            TransactionDataV1(
+                kind: .programmableTransaction(ProgrammableTransaction(inputs: [], transactions: [])),
+                sender: try AccountAddress.fromHex("0x1"),
+                gasData: SuiGasData(payment: [], owner: "0x1", price: "1", budget: "1"),
+                expiration: .validDuring(
+                    minEpoch: 1,
+                    maxEpoch: 2,
+                    minTimestamp: nil,
+                    maxTimestamp: nil,
+                    chain: chain,
+                    nonce: 0x0102_0304
+                )
+            )
+        )
+
+        let serializer = Serializer()
+        try transaction.serialize(serializer)
+        let bytes = serializer.output()
+
+        XCTAssertEqual(bytes.suffix(37).first, 32)
+        XCTAssertEqual(Array(bytes.suffix(36).prefix(32)), chain)
+        XCTAssertEqual(Array(bytes.suffix(4)), [0x04, 0x03, 0x02, 0x01])
+    }
+
+    func testAddressBalanceTransactionMatchesOfficialSuiBCS() throws {
+        let owner = "0x6a5dc653607568255f88da23004ae590c357533b95f07d9f8bf29f7066026736"
+        let genesisDigest = "4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S"
+        let recipient = try AccountAddress.fromHex(owner)
+        let transaction = TransactionData.V1(
+            TransactionDataV1(
+                kind: .programmableTransaction(
+                    ProgrammableTransaction(
+                        inputs: [
+                            Input(type: .fundsWithdrawal(FundsWithdrawal(
+                                amount: 100_000_000,
+                                coinType: try TypeTag(stringValue: "0x2::sui::SUI")
+                            ))),
+                            Input(type: .pure(PureCallArg(value: recipient.address)))
+                        ],
+                        transactions: [
+                            .moveCall(try MoveCallTransaction(
+                                target: "0x2::coin::redeem_funds",
+                                typeArguments: ["0x2::sui::SUI"],
+                                arguments: [.input(TransactionBlockInput(index: 0))]
+                            )),
+                            .transferObjects(TransferObjectsTransaction(
+                                objects: [.result(Result(index: 0))],
+                                address: .input(TransactionBlockInput(index: 1))
+                            ))
+                        ]
+                    )
+                ),
+                sender: recipient,
+                gasData: SuiGasData(payment: [], owner: owner, price: "100", budget: "8500"),
+                expiration: .validDuring(
+                    minEpoch: 1212,
+                    maxEpoch: 1213,
+                    minTimestamp: nil,
+                    maxTimestamp: nil,
+                    chain: try XCTUnwrap(genesisDigest.base58DecodedData?.bytes),
+                    nonce: 0xe422_abff
+                )
+            )
+        )
+
+        let serializer = Serializer()
+        try transaction.serialize(serializer)
+        XCTAssertEqual(
+            serializer.output().base64EncodedString(),
+            "AAACAgAA4fUFAAAAAAAHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIDc3VpA1NVSQAAACBqXcZTYHVoJV+I2iMASuWQw1dTO5XwfZ+L8p9wZgJnNgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIEY29pbgxyZWRlZW1fZnVuZHMBBwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACA3N1aQNTVUkAAQEAAAEBAgAAAQEAal3GU2B1aCVfiNojAErlkMNXUzuV8H2fi/KfcGYCZzYAal3GU2B1aCVfiNojAErlkMNXUzuV8H2fi/KfcGYCZzZkAAAAAAAAADQhAAAAAAAAAgG8BAAAAAAAAAG9BAAAAAAAAAAAIDWDSorBfKSPsUrI+ZwXyYdH6V3QcpSuQaRrOCJGpEmb/6si5A=="
+        )
+    }
+
     func testThatValidatesThatAProgrammableTransactionWillSerializeAndDeserializeAsIntended() throws {
         let serValue = Serializer()
         let serArguments = Serializer()

@@ -176,7 +176,7 @@ final class SECP256R1WalletTest: XCTestCase {
                 digest: [UInt8]([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]).base58EncodedString
             )
         ])
-        let result = try await txb.build(SuiProvider(connection: LocalnetConnection()))
+        let result = try await txb.build(GraphQLSuiProvider(connection: LocalnetConnection()))
 
         let serializedSignature = try account.signTransactionBlock([UInt8](result))
 

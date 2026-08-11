@@ -27,14 +27,12 @@ import Foundation
 
 /// Protocol defining the requirements for a connection configuration.
 public protocol ConnectionProtocol: Sendable {
-    /// The URL or IP address of the full node to connect to.
-    var fullNode: String { get }
-
     /// Optional URL for a faucet service to obtain tokens.
     /// Default is nil, meaning no faucet is configured.
     var faucet: String? { get }
 
-    var graphql: String? { get }
+    /// The GraphQL endpoint used for Sui queries, simulation, and execution.
+    var graphql: String { get }
 
     /// Optional URL for a WebSocket connection.
     /// Default is nil, meaning no WebSocket is configured.

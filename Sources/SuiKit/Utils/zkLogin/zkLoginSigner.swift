@@ -125,8 +125,7 @@ public class ZkLoginSigner {
     ///   - options: Optional execution parameters
     /// - Returns: The transaction execution response
     public func signAndExecuteTransaction(
-        transactionBlock: inout TransactionBlock,
-        options: SuiTransactionBlockResponseOptions = .init()
+        transactionBlock: inout TransactionBlock
     ) async throws -> SuiTransactionBlockResponse {
         // Ensure the transaction has the zkLogin user address as sender
         try transactionBlock.setSender(sender: userAddress)
@@ -138,11 +137,9 @@ public class ZkLoginSigner {
         let serializedSignature = try signTransaction(bytes.bytes)
 
         // Execute the transaction with the zkLogin signature
-        var resp = try await provider.executeTransactionBlock(
-            transactionBlock: bytes.bytes,
-            signature: serializedSignature,
-            options: options,
-            requestType: nil
+        var resp = try await provider.executeTransaction(
+            transactionData: bytes.bytes,
+            signature: serializedSignature
         )
 
         // Wait for confirmation
@@ -151,36 +148,20 @@ public class ZkLoginSigner {
     }
 
     public func executeTransaction(
-        transactionBlock: [UInt8],
-        options: SuiTransactionBlockResponseOptions = .init()
+        transactionBlock: [UInt8]
     ) async throws -> SuiTransactionBlockResponse {
         // Sign the transaction data with our zkLogin signer
         let serializedSignature = try signTransaction(transactionBlock)
 
         // Execute the transaction with the zkLogin signature
-        var resp = try await provider.executeTransactionBlock(
-            transactionBlock: transactionBlock,
-            signature: serializedSignature,
-            options: options,
-            requestType: nil
+        var resp = try await provider.executeTransaction(
+            transactionData: transactionBlock,
+            signature: serializedSignature
         )
 
         // Wait for confirmation
         resp = try await provider.waitForTransaction(tx: resp.digest, options: nil)
         return resp
-    }
-
-    /// Sign and execute a transaction block using zkLogin authentication
-    /// - Parameters:
-    ///   - transactionBlock: The transaction block to execute
-    ///   - options: Optional execution parameters
-    /// - Returns: The transaction execution response
-    public func signAndExecuteTransactionBlock(
-        transactionBlock: inout TransactionBlock,
-        options: SuiTransactionBlockResponseOptions = .init()
-    ) async throws -> SuiTransactionBlockResponse {
-        var txBlock = transactionBlock
-        return try await signAndExecuteTransaction(transactionBlock: &txBlock, options: options)
     }
 
     /// Verify a zkLogin signature against transaction data

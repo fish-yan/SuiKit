@@ -37,38 +37,31 @@ public struct GraphQLSuiProvider: Provider {
 
     public init(connection: any ConnectionProtocol) {
         self.connection = connection
-        self.apollo = ApolloClient(url: URL(string: connection.graphql!)!)
+        self.apollo = ApolloClient(url: URL(string: connection.graphql)!)
     }
 
-    /// Runs the transaction in dev-inspect mode. Which allows for nearly any transaction (or Move call) with any arguments. Detailed results are provided, including both the transaction effects and any return values.
+    /// Simulates a transaction with checks disabled and returns command results.
     /// - Parameters:
-    ///   - transactionBlock: BCS encoded TransactionKind(as opposed to TransactionData, which include gasBudget and gasPrice).
-    ///   - sender: The account that sends the transaction.
+    ///   - transaction: The transaction to simulate.
+    ///   - sender: The canonical Sui address used as transaction sender.
     ///   - gasPrice: Gas is not charged, but gas usage is still calculated. Default to use reference gas price.
-    ///   - epoch: The epoch to perform the call. Will be set from the system state object if not provided.
     /// - Returns: The results of the inspection, encapsulated in a `DevInspectResults` object, if successful.
     /// - Throws: Throws an error if inspection fails, or if any error occurs during the process.
-    public func devInspectTransactionBlock(
-        transactionBlock: inout TransactionBlock,
-        sender: Account,
-        gasPrice: Int? = nil,
-        epoch: String? = nil
+    public func inspectTransaction(
+        transaction: inout TransactionBlock,
+        sender: String,
+        gasPrice: Int? = nil
     ) async throws -> DevInspectResults? {
-        guard epoch == nil else {
-            throw SuiError.customError(
-                message: "GraphQL simulateTransaction does not support an epoch override"
-            )
-        }
-        let senderAddress = try sender.publicKey.toSuiAddress()
-        try transactionBlock.setSenderIfNotSet(sender: senderAddress)
-        _ = try await transactionBlock.build(self, true)
-        let transaction = try GraphQLTransactionJSONEncoder.encode(
-            transactionBlock.blockData.builder,
+        let senderAddress = try validatedAddress(sender)
+        try transaction.setSenderIfNotSet(sender: senderAddress)
+        _ = try await transaction.build(self, true)
+        let simulationTransaction = try GraphQLTransactionJSONEncoder.encode(
+            transaction.blockData.builder,
             sender: try AccountAddress.fromHex(senderAddress),
             gasPrice: gasPrice
         )
         let simulation = try await simulateTransaction(
-            transaction: transaction,
+            transaction: simulationTransaction,
             checksEnabled: false,
             doGasSelection: true
         )
@@ -83,23 +76,16 @@ public struct GraphQLSuiProvider: Provider {
         )
     }
 
-    /// Return transaction execution effects including the gas cost summary, while the effects are not committed to the chain.
-    /// - Parameter transactionBlock: The bytes representing the transaction block to be dry run.
-    /// - Returns: A `SuiTransactionBlockResponse` representing the outcome of the dry run.
-    /// - Throws: Throws an error if the dry run fails or if any error occurs during the process.
-    public func dryRunTransactionBlock(
-        transactionBlock: [UInt8]
+    /// Simulates a typed transaction without committing it to the chain.
+    public func simulateTransaction(
+        transaction: TransactionDataV1,
+        checksEnabled: Bool,
+        doGasSelection: Bool
     ) async throws -> SuiTransactionBlockResponse {
-        let transactionData: TransactionData = try Deserializer._struct(
-            Deserializer(data: Data(transactionBlock))
-        )
-        guard case .V1(let versionOne) = transactionData else {
-            throw SuiError.customError(message: "Unsupported transaction data version")
-        }
         let simulation = try await simulateTransaction(
-            transaction: GraphQLTransactionJSONEncoder.encode(versionOne),
-            checksEnabled: true,
-            doGasSelection: false
+            transaction: GraphQLTransactionJSONEncoder.encode(transaction),
+            checksEnabled: checksEnabled,
+            doGasSelection: doGasSelection
         )
         return try transactionResponse(
             transaction: JSON(["effects": simulation["effects"].object as Any]),
@@ -116,20 +102,16 @@ public struct GraphQLSuiProvider: Provider {
     ///   - requestType: The type of the Sui request being made.
     /// - Returns: A `SuiTransactionBlockResponse` representing the outcome of the executed transaction block.
     /// - Throws: Throws an error if signing or executing the transaction block fails, or if any error occurs during the process.
-    public func signAndExecuteTransactionBlock(
-        transactionBlock: inout TransactionBlock,
-        signer: Account,
-        options: SuiTransactionBlockResponseOptions? = nil,
-        requestType: SuiRequestType? = nil
+    public func signAndExecuteTransaction(
+        transaction: inout TransactionBlock,
+        signer: Account
     ) async throws -> SuiTransactionBlockResponse {
-        try transactionBlock.setSenderIfNotSet(sender: try signer.publicKey.toSuiAddress())
-        let transactionData = try await transactionBlock.build(self)
+        try transaction.setSenderIfNotSet(sender: try signer.publicKey.toSuiAddress())
+        let transactionData = try await transaction.build(self)
         let signature = try signer.signTransactionBlock([UInt8](transactionData))
-        return try await executeTransactionBlock(
-            transactionBlock: [UInt8](transactionData),
-            signature: try signer.toSerializedSignature(signature),
-            options: options,
-            requestType: requestType
+        return try await executeTransaction(
+            transactionData: [UInt8](transactionData),
+            signature: try signer.toSerializedSignature(signature)
         )
     }
 
@@ -146,17 +128,15 @@ public struct GraphQLSuiProvider: Provider {
     ///   - requestType: The request type, derived from `SuiTransactionBlockResponseOptions` if None
     /// - Returns: A `SuiTransactionBlockResponse` representing the outcome of the executed transaction block.
     /// - Throws: Throws an error if executing the transaction block fails or if any error occurs during the process.
-    public func executeTransactionBlock(
-        transactionBlock: String,
-        signature: String,
-        options: SuiTransactionBlockResponseOptions? = nil,
-        requestType: SuiRequestType? = nil
+    public func executeTransaction(
+        transactionData: [UInt8],
+        signature: String
     ) async throws -> SuiTransactionBlockResponse {
         let data = try await GraphQLClient.execute(
             endpoint: try graphQLEndpoint(),
             query: Self.executeTransactionMutation,
             variables: [
-                "transactionDataBcs": .string(transactionBlock),
+                "transactionDataBcs": .string(transactionData.toBase64()),
                 "signatures": .array([.string(signature)])
             ]
         )
@@ -167,33 +147,6 @@ public struct GraphQLSuiProvider: Provider {
             transaction: JSON(["effects": effects]),
             fallbackDigest: data["executeTransaction"]["effects"]["transaction"]["digest"].string,
             errors: nil
-        )
-    }
-
-    /// Execute the transaction and wait for results if desired. Request types: 1. WaitForEffectsCert: waits for TransactionEffectsCert and then return to client.
-    ///
-    /// This mode is a proxy for transaction finality. 2. WaitForLocalExecution: waits for TransactionEffectsCert and make sure the node executed the transaction
-    /// locally before returning the client. The local execution makes sure this node is aware of this transaction when client fires subsequent queries.
-    /// However if the node fails to execute the transaction locally in a timely manner, a bool type in the response is set to false to indicated the case.
-    /// request_type is default to be `WaitForEffectsCert` unless options.show_events or options.show_effects is true.
-    /// - Parameters:
-    ///   - transactionBlock: BCS serialized transaction data bytes without its type tag, as base-64 encoded string.
-    ///   - signature: A list of signatures (`flag || signature || pubkey` bytes, as base-64 encoded string). Signature is committed to the intent message of the transaction data, as base-64 encoded string.
-    ///   - options: options for specifying the content to be returned
-    ///   - requestType: The request type, derived from `SuiTransactionBlockResponseOptions` if None
-    /// - Throws: A `SuiError` if the GraphQL request fails or the response cannot be decoded.
-    /// - Returns: A `SuiTransactionBlockResponse` containing the results of the executed transaction block.
-    public func executeTransactionBlock(
-        transactionBlock: [UInt8],
-        signature: String,
-        options: SuiTransactionBlockResponseOptions? = nil,
-        requestType: SuiRequestType? = nil
-    ) async throws -> SuiTransactionBlockResponse {
-        try await executeTransactionBlock(
-            transactionBlock: transactionBlock.toBase64(),
-            signature: signature,
-            options: options,
-            requestType: requestType
         )
     }
 
@@ -605,14 +558,30 @@ public struct GraphQLSuiProvider: Provider {
     /// - Throws: `SuiError` if there is any error in the JSON RPC call or the response.
     /// - Returns: An array of `CoinBalance` representing the balances of different coins in the account.
     public func getAllBalances(
-        account: Account
+        owner: String
     ) async throws -> [CoinBalance] {
-        let data = try await GraphQLClient.execute(
-            endpoint: try graphQLEndpoint(),
-            query: Self.allBalancesQuery,
-            variables: ["owner": .string(try account.address())]
-        )
-        return try data["address"]["balances"]["nodes"].arrayValue.map(balance)
+        let owner = try validatedAddress(owner)
+        var cursor: String?
+        var balances: [CoinBalance] = []
+
+        repeat {
+            let data = try await GraphQLClient.execute(
+                endpoint: try graphQLEndpoint(),
+                query: Self.allBalancesQuery,
+                variables: [
+                    "owner": .string(owner),
+                    "first": .number(50),
+                    "after": cursor.map(SuiJSON.string) ?? .null
+                ]
+            )
+            let connection = data["address"]["balances"]
+            balances.append(contentsOf: try connection["nodes"].arrayValue.map(balance))
+            cursor = connection["pageInfo"]["hasNextPage"].boolValue
+                ? connection["pageInfo"]["endCursor"].string
+                : nil
+        } while cursor != nil
+
+        return balances
     }
 
     /// Return all Coin objects owned by an address.
@@ -623,12 +592,13 @@ public struct GraphQLSuiProvider: Provider {
     /// - Throws: `SuiError` if there is any error in the JSON RPC call or the response.
     /// - Returns: A `PaginatedCoins` object containing the retrieved coins and pagination information.
     public func getAllCoins(
-        account: any PublicKeyProtocol,
+        owner: String,
         cursor: String? = nil,
         limit: UInt? = nil
     ) async throws -> PaginatedCoins {
-        return try await self.getCoins(
-            account: try account.toSuiAddress(),
+        try await listCoinObjects(
+            account: owner,
+            typeFilter: "0x2::coin::Coin",
             cursor: cursor,
             limit: limit
         )
@@ -640,16 +610,9 @@ public struct GraphQLSuiProvider: Provider {
     ///   - coinType: Optional. The type of the coin whose balance is to be retrieved.
     /// - Throws: `SuiError` if there is any error in the JSON RPC call or the response.
     /// - Returns: A `CoinBalance` object representing the balance of the specified coin in the account.
-    public func getBalance(
-        account: any PublicKeyProtocol,
-        coinType: String? = nil
-    ) async throws -> CoinBalance {
-        try await getBalance(account: try account.toSuiAddress(), coinType: coinType)
-    }
-
     /// Return the total balance for a canonical Sui address.
     public func getBalance(
-        account: String,
+        owner: String,
         coinType: String? = nil
     ) async throws -> CoinBalance {
         let type = coinType ?? "0x2::sui::SUI"
@@ -657,7 +620,7 @@ public struct GraphQLSuiProvider: Provider {
             endpoint: try graphQLEndpoint(),
             query: Self.balanceQuery,
             variables: [
-                "owner": .string(account),
+                "owner": .string(try validatedAddress(owner)),
                 "coinType": .string(type)
             ]
         )
@@ -688,12 +651,27 @@ public struct GraphQLSuiProvider: Provider {
     /// - Throws: `SuiError` if there is any error in the JSON RPC call or the response.
     /// - Returns: A `PaginatedCoins` object containing the retrieved coins and pagination information.
     public func getCoins(
-        account: String,
+        owner: String,
         coinType: String? = nil,
         cursor: String? = nil,
         limit: UInt? = nil
     ) async throws -> PaginatedCoins {
         let type = coinType ?? "0x2::sui::SUI"
+        return try await listCoinObjects(
+            account: owner,
+            typeFilter: "0x2::coin::Coin<\(type)>",
+            cursor: cursor,
+            limit: limit
+        )
+    }
+
+    /// Lists owned Move coin objects with an explicit GraphQL type filter.
+    private func listCoinObjects(
+        account: String,
+        typeFilter: String,
+        cursor: String?,
+        limit: UInt?
+    ) async throws -> PaginatedCoins {
         let data = try await GraphQLClient.execute(
             endpoint: try graphQLEndpoint(),
             query: Self.coinsQuery,
@@ -701,7 +679,7 @@ public struct GraphQLSuiProvider: Provider {
                 "owner": .string(try validatedAddress(account)),
                 "first": limit.map { .number(Double($0)) } ?? .null,
                 "after": cursor.map(SuiJSON.string) ?? .null,
-                "type": .string("0x2::coin::Coin<\(type)>")
+                "type": .string(typeFilter)
             ]
         )
         let coins = data["address"]["objects"]
@@ -1185,14 +1163,29 @@ public struct GraphQLSuiProvider: Provider {
     }
 
     private func balance(_ json: JSON) throws -> CoinBalance {
-        try CoinBalance(
+        let totalBalance = json["totalBalance"].stringValue
+        let addressBalance = json["addressBalance"].string ?? "0"
+        let coinBalance = json["coinBalance"].string ?? derivedCoinBalance(
+            totalBalance: totalBalance,
+            addressBalance: addressBalance
+        )
+        return try CoinBalance(
             coinType: json["coinType"]["repr"].stringValue,
             coinObjectCount: 0,
-            totalBalance: json["totalBalance"].stringValue,
+            totalBalance: totalBalance,
             lockedBalance: nil,
-            coinBalance: json["coinBalance"].string,
-            addressBalance: json["addressBalance"].string
+            coinBalance: coinBalance,
+            addressBalance: addressBalance
         )
+    }
+
+    /// `coinBalance` is optional in the current GraphQL schema; derive it
+    /// from the stable total/address balance fields when it is not selected.
+    private func derivedCoinBalance(totalBalance: String, addressBalance: String) -> String {
+        guard let total = BigInt(totalBalance), let address = BigInt(addressBalance) else {
+            return "0"
+        }
+        return String(max(total - address, 0))
     }
 
     private func checkpoint(_ json: JSON) -> Checkpoint {
@@ -1504,7 +1497,7 @@ public struct GraphQLSuiProvider: Provider {
     }
 
     private func graphQLEndpoint() throws -> URL {
-        guard let endpoint = connection.graphql, let url = URL(string: endpoint) else {
+        guard let url = URL(string: connection.graphql) else {
             throw SuiError.customError(message: "Missing or invalid GraphQL URL")
         }
         return url
@@ -1737,9 +1730,12 @@ public struct GraphQLSuiProvider: Provider {
     """
 
     private static let allBalancesQuery = """
-    query AllBalances($owner: SuiAddress!) {
+    query AllBalances($owner: SuiAddress!, $first: Int, $after: String) {
       address(address: $owner) {
-        balances(first: 50) { nodes { coinType { repr } totalBalance } }
+        balances(first: $first, after: $after) {
+          pageInfo { hasNextPage endCursor }
+          nodes { coinType { repr } totalBalance addressBalance }
+        }
       }
     }
     """
@@ -1808,7 +1804,6 @@ public struct GraphQLSuiProvider: Provider {
         balance(coinType: $coinType) {
           coinType { repr }
           totalBalance
-          coinBalance
           addressBalance
         }
       }

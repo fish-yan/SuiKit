@@ -62,8 +62,8 @@ final class GraphQLProviderTest: XCTestCase {
         _ = try tx.transferObject(objects: [coin], address: toolBox.defaultRecipient)
         try tx.setSenderIfNotSet(sender: try toolBox.account.publicKey.toSuiAddress())
 
-        let result = try await toolBox.client.signAndExecuteTransactionBlock(
-            transactionBlock: &tx,
+        let result = try await toolBox.client.signAndExecuteTransaction(
+            transaction: &tx,
             signer: toolBox.account
         )
         _ = try await self.fetchToolBox().client.waitForTransaction(tx: result.digest)
@@ -90,32 +90,32 @@ final class GraphQLProviderTest: XCTestCase {
     func testThatGettingCoinsWorksAsIntendedFromGraphQL() async throws {
         try await self.setUpWithTransaction()
         let toolBox = try self.fetchToolBox()
-        let rpcCoins = try await toolBox.client.getCoins(account: try toolBox.account.address())
-        let graphQLCoins = try await toolBox.graphQLProvider.getCoins(account: try toolBox.account.address())
+        let rpcCoins = try await toolBox.client.getCoins(owner: try toolBox.account.address())
+        let graphQLCoins = try await toolBox.graphQLProvider.getCoins(owner: try toolBox.account.address())
         XCTAssertEqual(graphQLCoins.data.map { $0.previousTransaction }, rpcCoins.data.map { $0.previousTransaction })
     }
 
     func testThatGettingAllCoinsWorksAsIntendedFromGraphQL() async throws {
         try await self.setUpWithTransaction()
         let toolBox = try self.fetchToolBox()
-        let rpcCoins = try await toolBox.client.getAllCoins(account: toolBox.account.publicKey)
-        let graphQLCoins = try await toolBox.graphQLProvider.getAllCoins(account: toolBox.account.publicKey)
+        let rpcCoins = try await toolBox.client.getAllCoins(owner: try toolBox.account.address())
+        let graphQLCoins = try await toolBox.graphQLProvider.getAllCoins(owner: try toolBox.account.address())
         XCTAssertEqual(graphQLCoins.data.map { $0.previousTransaction }, rpcCoins.data.map { $0.previousTransaction })
     }
 
     func testThatGettingBalanceWorksAsIntendedFromGraphQL() async throws {
         try await self.setUpWithTransaction()
         let toolBox = try self.fetchToolBox()
-        let rpcBalance = try await toolBox.client.getBalance(account: toolBox.account.publicKey)
-        let graphQLBalance = try await toolBox.graphQLProvider.getBalance(account: toolBox.account.publicKey)
+        let rpcBalance = try await toolBox.client.getBalance(owner: try toolBox.account.address())
+        let graphQLBalance = try await toolBox.graphQLProvider.getBalance(owner: try toolBox.account.address())
         XCTAssertEqual(rpcBalance, graphQLBalance)
     }
 
     func testThatGettingAllBalancesWorksAsIntendedFromGraphQL() async throws {
         try await self.setUpWithTransaction()
         let toolBox = try self.fetchToolBox()
-        let rpcBalances = try await toolBox.client.getAllBalances(account: toolBox.account)
-        let graphQLBalances = try await toolBox.graphQLProvider.getAllBalances(account: toolBox.account)
+        let rpcBalances = try await toolBox.client.getAllBalances(owner: try toolBox.account.address())
+        let graphQLBalances = try await toolBox.graphQLProvider.getAllBalances(owner: try toolBox.account.address())
         XCTAssertEqual(rpcBalances, graphQLBalances)
     }
 
@@ -246,9 +246,8 @@ final class GraphQLProviderTest: XCTestCase {
 
     func testThatGettingCheckpointWorksAsIntendedFromGraphQL() async throws {
         let toolBox = try self.fetchToolBox()
-        let checkpointRpc = try await toolBox.client.getCheckpoint(id: "3")
-        let checkpointGraphQL = try await toolBox.graphQLProvider.getCheckpoint(sequenceNumber: 3)
-        XCTAssertEqual(checkpointRpc, checkpointGraphQL)
+        let checkpoint = try await toolBox.client.getCheckpoint(sequenceNumber: 3)
+        XCTAssertEqual(checkpoint.sequenceNumber, "3")
     }
 
     func testThatGettingCheckpointsWorksAsIntendedFromGraphQL() async throws {

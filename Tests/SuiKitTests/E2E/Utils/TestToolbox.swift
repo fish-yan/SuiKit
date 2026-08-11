@@ -33,12 +33,12 @@ internal class TestToolbox {
     let defaultRecipient = "0x0c567ffdf8162cb6d51af74be0199443b92e823d4ba6ced24de5c6c463797d46"
 
     let account: Account
-    let client: SuiProvider
+    let client: GraphQLSuiProvider
     let graphQLProvider: GraphQLSuiProvider
 
     init(
         account: Account,
-        client: SuiProvider = SuiProvider(connection: LocalnetConnection()),
+        client: GraphQLSuiProvider = GraphQLSuiProvider(connection: LocalnetConnection()),
         graphQLClient: GraphQLSuiProvider = GraphQLSuiProvider(connection: LocalnetConnection()),
         _ needsFunds: Bool = true
     ) async throws {
@@ -51,7 +51,7 @@ internal class TestToolbox {
 
     init(_ needsFunds: Bool = true) async throws {
         self.account = try Account()
-        self.client = SuiProvider(connection: LocalnetConnection())
+        self.client = GraphQLSuiProvider(connection: LocalnetConnection())
         self.graphQLProvider = GraphQLSuiProvider(connection: LocalnetConnection())
         if needsFunds { try await self.setup() }
     }
@@ -61,12 +61,12 @@ internal class TestToolbox {
     }
 
     func getAllCoins() async throws -> PaginatedCoins {
-        return try await self.client.getAllCoins(account: self.account.publicKey)
+        return try await self.client.getAllCoins(owner: try self.account.address())
     }
 
     func getCoins() async throws -> PaginatedCoins {
         return try await self.client.getCoins(
-            account: try self.account.publicKey.toSuiAddress(),
+            owner: try self.account.publicKey.toSuiAddress(),
             coinType: "0x2::sui::SUI"
         )
     }
@@ -89,10 +89,9 @@ internal class TestToolbox {
             showEffects: true,
             showObjectChanges: true
         )
-        var publishTxBlock = try await self.client.signAndExecuteTransactionBlock(
-            transactionBlock: &txBlock,
-            signer: self.account,
-            options: options
+        var publishTxBlock = try await self.client.signAndExecuteTransaction(
+            transaction: &txBlock,
+            signer: self.account
         )
         publishTxBlock = try await self.client.waitForTransaction(tx: publishTxBlock.digest, options: options)
 
@@ -137,7 +136,7 @@ internal class TestToolbox {
         var coinIdTx = coinId
         if coinIdTx == nil {
             coinIdTx = try await self.client.getCoins(
-                account: try self.account.publicKey.toSuiAddress(),
+                owner: try self.account.publicKey.toSuiAddress(),
                 coinType: "0x2::sui::SUI"
             ).data[0].coinObjectId
         }
@@ -157,13 +156,9 @@ internal class TestToolbox {
             _ = try txBlock.transferObject(objects: [coin], address: recipient)
         }
 
-        let publishTxBlock = try await self.client.signAndExecuteTransactionBlock(
-            transactionBlock: &txBlock,
-            signer: self.account,
-            options: SuiTransactionBlockResponseOptions(
-                showEffects: true,
-                showObjectChanges: true
-            )
+        let publishTxBlock = try await self.client.signAndExecuteTransaction(
+            transaction: &txBlock,
+            signer: self.account
         )
 
         guard publishTxBlock.effects?.status.status == .success else {
@@ -189,8 +184,8 @@ internal class TestToolbox {
         return txns
     }
 
-    func executeTransactionBlock(txb: inout TransactionBlock) async throws -> SuiTransactionBlockResponse {
-        let resp = try await self.client.signAndExecuteTransactionBlock(transactionBlock: &txb, signer: self.account, options: SuiTransactionBlockResponseOptions(showEffects: true, showEvents: true, showObjectChanges: true))
+    func executeTransaction(txb: inout TransactionBlock) async throws -> SuiTransactionBlockResponse {
+        let resp = try await self.client.signAndExecuteTransaction(transaction: &txb, signer: self.account)
         guard resp.effects?.status.status == .success else { throw SuiError.notImplemented }
         return resp
     }

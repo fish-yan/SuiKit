@@ -119,36 +119,52 @@ public struct TransactionBlockDataBuilder: KeyProtocol {
             return ser.output()
         }
 
-        let expiration = overrides?.builder.expiration ?? self.builder.expiration
-        let senderUnwrapped = overrides?.builder.sender ?? self.builder.sender
-        let gasConfig = overrides?.builder.gasConfig ?? self.builder.gasConfig
-
-        guard
-            let sender = senderUnwrapped,
-            let budget = gasConfig.budget,
-            let payment = gasConfig.payment,
-            let price = gasConfig.price
-        else {
-            throw SuiError.customError(message: "Missing gas value")
-        }
-
-        let transactionData = TransactionData.V1(TransactionDataV1(
-            kind: SuiTransactionBlockKind.programmableTransaction(kind),
-            sender: sender,
-            gasData: try SuiGasData(
-                payment: payment,
-                owner: prepareSuiAddress(
-                    address: self.builder.gasConfig.owner?.hex() ?? sender.hex()
-                ),
-                price: price,
-                budget: budget
-            ),
-            expiration: expiration ?? TransactionExpiration.none
-        ))
+        let transactionData = TransactionData.V1(
+            try buildTransactionData(overrides: overrides)
+        )
 
         let ser = Serializer()
         try transactionData.serialize(ser)
         return ser.output()
+    }
+
+    /// Builds typed transaction data for GraphQL or gRPC simulation.
+    ///
+    /// Unlike BCS bytes, this preserves the transaction boundary and cannot be
+    /// confused with TransactionKind or an intent-prefixed signing message.
+    public func buildTransactionData(
+        overrides: TransactionBlockDataBuilder? = nil
+    ) throws -> TransactionDataV1 {
+        let inputs: [Input] = builder.inputs.compactMap { value in
+            guard case .callArg(let callArg) = value.value else { return nil }
+            return callArg
+        }
+        let kind = ProgrammableTransaction(inputs: inputs, transactions: builder.transactions)
+        let expiration = overrides?.builder.expiration ?? builder.expiration
+        let senderUnwrapped = overrides?.builder.sender ?? builder.sender
+        let gasConfig = overrides?.builder.gasConfig ?? builder.gasConfig
+
+        guard let sender = senderUnwrapped,
+              let budget = gasConfig.budget,
+              let payment = gasConfig.payment,
+              let price = gasConfig.price
+        else {
+            throw SuiError.customError(message: "Missing gas value")
+        }
+
+        return TransactionDataV1(
+            kind: .programmableTransaction(kind),
+            sender: sender,
+            gasData: try SuiGasData(
+                payment: payment,
+                owner: prepareSuiAddress(
+                    address: gasConfig.owner?.hex() ?? sender.hex()
+                ),
+                price: price,
+                budget: budget
+            ),
+            expiration: expiration ?? .none
+        )
     }
 
     /// Computes and returns the digest of the built transaction data.

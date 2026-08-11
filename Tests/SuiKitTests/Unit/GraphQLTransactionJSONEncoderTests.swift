@@ -9,6 +9,30 @@ import XCTest
 @testable import SuiKit
 
 final class GraphQLTransactionJSONEncoderTests: XCTestCase {
+    func testTypedTransactionDataBuildsWithoutBCSDecoding() throws {
+        let sender = try AccountAddress.fromHex("0x1")
+        let gasObject = SuiObjectRef(
+            objectId: "0x2",
+            version: "3",
+            digest: "11111111111111111111111111111111"
+        )
+        let builder = try SerializedTransactionDataBuilder(
+            sender: sender,
+            gasConfig: SuiGasData(
+                payment: [gasObject],
+                owner: sender,
+                price: "1000",
+                budget: "1000000"
+            )
+        )
+        let blockData = TransactionBlockDataBuilder(builder: builder)
+
+        let transaction = try blockData.buildTransactionData()
+        XCTAssertEqual(transaction.sender, sender)
+        XCTAssertEqual(transaction.gasData.payment?.first?.objectId, gasObject.objectId)
+        XCTAssertEqual(transaction.gasData.budget, "1000000")
+    }
+
     func testAddressBalanceMaxTransferStartsWithAResolvableWithdrawal() throws {
         let transaction = try TransactionBlock()
         _ = try transaction.transferMaxFromAddressBalance(toAddress: "0x2")

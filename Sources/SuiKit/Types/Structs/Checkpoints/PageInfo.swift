@@ -65,13 +65,6 @@ public struct PageInfo: Equatable {
         self.hasPreviousPage = graphql.hasPreviousPage
     }
 
-    public init(graphql: GetCoinsQuery.Data.Address.Coins.PageInfo) {
-        self.startCursor = nil
-        self.endCursor = graphql.endCursor
-        self.hasNextPage = graphql.hasNextPage
-        self.hasPreviousPage = false
-    }
-
     public init(graphql: GetOwnedObjectsQuery.Data.Address.Objects.PageInfo) {
         self.startCursor = nil
         self.endCursor = graphql.endCursor
