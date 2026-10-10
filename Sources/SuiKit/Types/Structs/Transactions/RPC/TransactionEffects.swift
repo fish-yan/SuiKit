@@ -66,8 +66,8 @@ public struct TransactionEffects {
     /// An optional array representing objects wrapped by the transaction.
     public var wrapped: [SuiObjectRef]?
 
-    /// Represents the gas object associated with the transaction effect.
-    public var gasObject: OwnedObjectRef
+    /// The gas Coin object, or nil when gas is paid from an address balance.
+    public var gasObject: OwnedObjectRef?
 
     /// An optional digest of the events related to the transaction.
     public var eventsDigest: TransactionEventDigest?
@@ -89,7 +89,7 @@ public struct TransactionEffects {
         deleted: [SuiObjectRef]? = nil,
         unwrappedThenDeleted: [SuiObjectRef]? = nil,
         wrapped: [SuiObjectRef]? = nil,
-        gasObject: OwnedObjectRef,
+        gasObject: OwnedObjectRef?,
         eventsDigest: TransactionEventDigest? = nil,
         dependencies: [TransactionDigest]? = nil
     ) {
@@ -114,7 +114,7 @@ public struct TransactionEffects {
     public init?(input: JSON) {
         guard let messageVersion = MessageVersion.fromJSON(input["messageVersion"]) else { return nil }
         guard let status = ExecutionStatus(input: input["status"]) else { return nil }
-        guard let gasObject = OwnedObjectRef(input: input["gasObject"]) else { return nil }
+        let gasObject = OwnedObjectRef(input: input["gasObject"])
 
         self.messageVersion = messageVersion
         self.status = status

@@ -15,7 +15,7 @@ import XCTest
 final class MainnetGraphQLIntegrationTests: XCTestCase {
     private let address = "0x6a5dc653607568255f88da23004ae590c357533b95f07d9f8bf29f7066026736"
 
-    func testAddressBalanceDoesNotRequireCoinObjects() async throws {
+    func testBalanceSeparatesAddressAndCoinFunds() async throws {
         try requireMainnetIntegration()
         let provider = GraphQLSuiProvider(connection: MainnetConnection())
 
@@ -29,7 +29,10 @@ final class MainnetGraphQLIntegrationTests: XCTestCase {
         XCTAssertEqual(total, addressBalance + coinBalance)
 
         let coins = try await provider.getCoins(owner: address, coinType: "0x2::sui::SUI")
-        XCTAssertTrue(coins.data.isEmpty)
+        let pageBalance = try coins.data.reduce(BigInt.zero) { total, coin in
+            total + (try XCTUnwrap(BigInt(coin.balance)))
+        }
+        XCTAssertLessThanOrEqual(pageBalance, coinBalance)
         XCTAssertGreaterThan(addressBalance, 0)
     }
 
@@ -61,10 +64,10 @@ final class MainnetGraphQLIntegrationTests: XCTestCase {
         let result = try await provider.simulateTransaction(
             transaction: try transaction.blockData.buildTransactionData(),
             checksEnabled: true,
-            doGasSelection: true
+            doGasSelection: false
         )
 
-        XCTAssertNotEqual(result.effects?.status.status, .failure)
+        XCTAssertEqual(result.effects?.status.status, .success)
     }
 
     func testProtocolConfigsUsesPluralCurrentSchemaField() async throws {
@@ -74,6 +77,23 @@ final class MainnetGraphQLIntegrationTests: XCTestCase {
         let config = try await provider.getProtocolConfig(version: nil)
         XCTAssertFalse(config.protocolVersion.isEmpty)
         XCTAssertFalse(config.attributes.isEmpty)
+    }
+
+    func testMixedBalanceTransferAndMaxSimulate() async throws {
+        try requireMainnetIntegration()
+        let provider = GraphQLSuiProvider(connection: MainnetConnection())
+        let builder = SuiTransferBuilder(provider: provider)
+        for amount: UInt64? in [15_000_000_000, nil] {
+            let transaction = try await builder.build(sender: address, recipient: address, amount: amount)
+            // Exercise the same serialization route used by the signer as well
+            // as the builder's strict simulation of the final funding plan.
+            let bytes = try await transaction.build(provider)
+            let decoded: TransactionData = try Deserializer._struct(Deserializer(data: bytes))
+            guard case .V1(let data) = decoded else { return XCTFail("Expected V1 transaction") }
+            let result = try await provider.simulateTransaction(transaction: data, checksEnabled: true, doGasSelection: false)
+            XCTAssertEqual(result.effects?.status.status, .success)
+            print("Sui transfer simulation: amount=\(amount.map(String.init) ?? "max"), budget=\(data.gasData.budget ?? "missing")")
+        }
     }
 
     private func requireMainnetIntegration() throws {

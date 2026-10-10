@@ -7,16 +7,15 @@ import Foundation
 
 enum GraphQLTransactionJSONEncoder {
     static func encode(_ data: TransactionDataV1) throws -> SuiJSON {
-        var transaction: [String: SuiJSON] = [
+        let transaction: [String: SuiJSON] = [
             "version": .number(1),
             "kind": try encode(data.kind),
             "sender": .string(data.sender.hex()),
             "gasPayment": encode(data.gasData, fallbackOwner: data.sender),
             "expiration": encode(data.expiration)
         ]
-        if data.gasData.payment?.isEmpty == true {
-            transaction.removeValue(forKey: "gasPayment")
-        }
+        // Empty objects explicitly selects address-balance gas. Keep its budget,
+        // price and owner so simulation checks the same reservation as execution.
         return .object(transaction)
     }
 

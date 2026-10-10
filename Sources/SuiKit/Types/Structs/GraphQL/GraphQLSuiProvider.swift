@@ -1529,31 +1529,32 @@ public struct GraphQLSuiProvider: Provider {
         )
     }
 
-    private func transactionEffects(_ effects: JSON) -> TransactionEffects? {
+    func transactionEffects(_ effects: JSON) -> TransactionEffects? {
         let raw = effects["effectsJson"]
+        guard let success = raw["status"]["success"].bool else { return nil }
         let gasObjectJSON = effects["gasEffects"]["gasObject"]
-        guard let gasObjectId = gasObjectJSON["address"].string,
-              let gasObjectDigest = gasObjectJSON["digest"].string else {
-            return nil
+        let changedObjects = raw["changedObjects"].arrayValue
+        var gasObject: OwnedObjectRef?
+        if let gasObjectId = gasObjectJSON["address"].string,
+           let gasObjectDigest = gasObjectJSON["digest"].string {
+            let gasChange = changedObjects.first { $0["objectId"].stringValue == gasObjectId }
+            let gasOwner = objectOwner(gasChange?["outputOwner"] ?? gasChange?["inputOwner"] ?? .null)
+            gasObject = OwnedObjectRef(
+                owner: gasOwner,
+                reference: SuiObjectRef(
+                    objectId: gasObjectId,
+                    version: gasObjectJSON["version"].stringValue,
+                    digest: gasObjectDigest
+                )
+            )
         }
 
-        let changedObjects = raw["changedObjects"].arrayValue
-        let gasChange = changedObjects.first { $0["objectId"].stringValue == gasObjectId }
-        let gasOwner = objectOwner(gasChange?["outputOwner"] ?? gasChange?["inputOwner"] ?? .null)
-        let gasObject = OwnedObjectRef(
-            owner: gasOwner,
-            reference: SuiObjectRef(
-                objectId: gasObjectId,
-                version: gasObjectJSON["version"].stringValue,
-                digest: gasObjectDigest
-            )
-        )
-
-        let status: ExecutionStatusType = raw["status"]["success"].boolValue ? .success : .failure
+        let status: ExecutionStatusType = success ? .success : .failure
         let gasUsed = raw["gasUsed"]
         return TransactionEffects(
             messageVersion: raw["version"].intValue >= 2 ? .v2 : .v1,
-            status: ExecutionStatus(status: status, error: raw["status"]["error"].string),
+            status: ExecutionStatus(status: status,
+                error: effects["executionError"]["message"].string ?? raw["status"]["error"].string),
             executedEpoch: raw["epoch"].stringValue,
             modifiedAtVersions: changedObjects.compactMap { change in
                 guard let version = change["inputVersion"].string else { return nil }

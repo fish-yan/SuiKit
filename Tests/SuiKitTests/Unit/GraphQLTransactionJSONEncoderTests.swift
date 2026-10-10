@@ -9,6 +9,36 @@ import XCTest
 @testable import SuiKit
 
 final class GraphQLTransactionJSONEncoderTests: XCTestCase {
+    func testAddressBalanceEffectsDoNotRequireAGasObject() throws {
+        let provider = GraphQLSuiProvider(connection: MainnetConnection())
+        let json = JSON([
+            "effectsJson": [
+                "version": 2, "status": ["success": true], "epoch": "1",
+                "transactionDigest": "digest",
+                "gasUsed": ["computationCost": "100000", "storageCost": "2000000",
+                            "storageRebate": "0", "nonRefundableStorageFee": "0"]
+            ],
+            "gasEffects": ["gasObject": NSNull()]
+        ])
+        let effects = try XCTUnwrap(provider.transactionEffects(json))
+        XCTAssertEqual(effects.status.status, .success)
+        XCTAssertEqual(effects.gasUsed.storageCost, "2000000")
+        XCTAssertNil(effects.gasObject)
+        XCTAssertNil(provider.transactionEffects(.null))
+    }
+
+    func testFailedAddressBalanceSimulationPreservesExecutionError() throws {
+        let provider = GraphQLSuiProvider(connection: MainnetConnection())
+        let effects = try XCTUnwrap(provider.transactionEffects(JSON([
+            "effectsJson": ["version": 2, "status": ["success": false]],
+            "executionError": ["message": "InsufficientGas"],
+            "gasEffects": ["gasObject": NSNull()]
+        ])))
+        XCTAssertEqual(effects.status.status, .failure)
+        XCTAssertEqual(effects.status.error, "InsufficientGas")
+        XCTAssertNil(effects.gasObject)
+    }
+
     func testTypedTransactionDataBuildsWithoutBCSDecoding() throws {
         let sender = try AccountAddress.fromHex("0x1")
         let gasObject = SuiObjectRef(
@@ -182,7 +212,10 @@ final class GraphQLTransactionJSONEncoderTests: XCTestCase {
             "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI"
         )
         XCTAssertEqual(input["fundsWithdrawal"]["source"].stringValue, "SENDER")
-        XCTAssertNil(json["gasPayment"].dictionary)
+        XCTAssertEqual(json["gasPayment"]["objects"].arrayValue.count, 0)
+        XCTAssertEqual(json["gasPayment"]["budget"].stringValue, "1000000")
+        XCTAssertEqual(json["gasPayment"]["price"].stringValue, "1000")
+        XCTAssertEqual(json["gasPayment"]["owner"].stringValue, sender.hex())
         XCTAssertEqual(json["expiration"]["kind"].stringValue, "VALID_DURING")
         XCTAssertEqual(json["expiration"]["minEpoch"].stringValue, "10")
         XCTAssertEqual(json["expiration"]["epoch"].stringValue, "10")

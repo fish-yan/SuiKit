@@ -76,6 +76,47 @@ dependencies: [
 
 ## Using SuiKit
 
+### Transfers with Coin objects and address balances
+
+Use `SuiTransferBuilder` for wallet transfers. It follows all Coin object pages,
+combines Coin objects with address balances when needed, reserves SUI for gas,
+and simulates the final funding plan with checks enabled. It does not sign or submit.
+
+```swift
+let provider = GraphQLSuiProvider(connection: MainnetConnection())
+let transferBuilder = SuiTransferBuilder(provider: provider)
+let transaction = try await transferBuilder.build(
+    sender: senderAddress,
+    recipient: recipientAddress,
+    amount: 15_000_000_000, // 15 SUI, in MIST. Pass nil for send-all.
+    coinType: "0x2::sui::SUI"
+)
+let gasBudget = transaction.blockData.builder.gasConfig.budget
+let bytes = try await transaction.build(provider)
+// Continue through your existing signing flow only after user confirmation.
+```
+
+For tokens, pass the token's coin type and amount in its smallest unit. `amount: nil`
+sends the entire token balance; for SUI it subtracts the gas budget from the combined
+balance. Zero amounts are rejected. An explicit `gasBudget` can be supplied and is
+validated by simulation. Rebuild before signing if balances or Coin versions changed.
+
+Migration: replace wallet calls to `transferFromAddressBalance` and
+`transferMaxFromAddressBalance` with this asynchronous builder in **both fee estimation
+and transaction signing**. For ONTO iOS, `make(transaction:)` needs to become async and
+both callers need `try await`. Keep the existing BCS/DApp transaction path unchanged.
+Use the returned `gasConfig.budget` for the fee budget (divide by `gasConfig.price`
+only if the caller expects gas units). Do not replace the selected gas payments
+or expiration after construction.
+
+The low-level `withdrawal`, `transferFromAddressBalance`, and
+`transferMaxFromAddressBalance` APIs intentionally spend address balances only.
+Updating the SDK alone does not migrate callers of those APIs to combined balances.
+`TransactionEffects.gasObject` is now optional: address-balance gas has no gas Coin
+object. Callers that access it should use optional chaining; effects and gas costs
+remain available when it is nil.
+See [Mysten's balance model](https://sdk.mystenlabs.com/sui/transactions/coins-and-balances).
+
 SuiKit is really easy to implement and use in your own projects. Simply provide the provider, transaction block, and account. Here's an example on how to transfer Sui tokens, which also utilizes the key generation functionality of the library
 
 ```swift

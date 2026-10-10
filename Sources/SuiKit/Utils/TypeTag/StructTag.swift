@@ -85,7 +85,6 @@ public struct StructTag: TypeProtocol, Equatable {
     }
 
     public static func deserialize(from deserializer: Deserializer) throws -> StructTag {
-        _ = try Deserializer.u8(deserializer)
         let address: AccountAddress = try Deserializer._struct(deserializer)
         let module = try Deserializer.string(deserializer)
         let name = try Deserializer.string(deserializer)

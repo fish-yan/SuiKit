@@ -85,14 +85,20 @@ public struct MoveCallTransaction: KeyProtocol, TransactionProtocol {
         try serializer.sequence(self.arguments, Serializer._struct)
     }
 
+    private init(target: SuiMoveNormalizedStructType, decodedTypeArguments: [TypeTag], arguments: [TransactionArgument]) {
+        self.target = target
+        self.typeArguments = decodedTypeArguments
+        self.arguments = arguments
+    }
+
     public static func deserialize(
         from deserializer: Deserializer
     ) throws -> MoveCallTransaction {
-        return try MoveCallTransaction(
-            target: try Deserializer._struct(deserializer),
-            typeArguments: try deserializer.sequence(valueDecoder: Deserializer._struct),
-            arguments: try deserializer.sequence(valueDecoder: Deserializer._struct)
-        )
+        let target: SuiMoveNormalizedStructType = try Deserializer._struct(deserializer)
+        // TypeTag owns its variant byte; StructTag contains only the struct body.
+        let types: [TypeTag] = try deserializer.sequence(valueDecoder: Deserializer._struct)
+        let arguments: [TransactionArgument] = try deserializer.sequence(valueDecoder: Deserializer._struct)
+        return MoveCallTransaction(target: target, decodedTypeArguments: types, arguments: arguments)
     }
 
     /// Adds to resolve list if needed, based on the arguments and provided inputs.

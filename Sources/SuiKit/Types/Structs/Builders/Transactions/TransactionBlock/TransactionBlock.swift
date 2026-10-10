@@ -242,9 +242,8 @@ public class TransactionBlock {
 
     /// Transfers an amount directly from the sender's address balance.
     ///
-    /// This is the address-balance equivalent of splitting `tx.gas` and is the
-    /// preferred API for SUI transfers when `getCoins` returns no `Coin<SUI>`
-    /// objects.
+    /// This deliberately excludes Coin objects. For wallet transfers that should
+    /// use the combined balance, use `SuiTransferBuilder` instead.
     @discardableResult
     public func transferFromAddressBalance(
         amount: UInt64,
@@ -262,6 +261,8 @@ public class TransactionBlock {
 
     /// Transfers all spendable SUI from an address balance.
     ///
+    /// Coin objects are excluded; use `SuiTransferBuilder` with a nil amount to
+    /// send the combined balance.
     /// The final amount is resolved during `build(_:)` as the current address
     /// balance minus the simulated gas budget.
     @discardableResult
@@ -814,6 +815,8 @@ public class TransactionBlock {
         if self.isMissingSender(onlyTransactionKind) {
             throw SuiError.customError(message: "Sender is missing")
         }
+        // A funded transfer has already been simulated at this explicit price.
+        guard self.blockData.builder.gasConfig.price == nil else { return }
         self.setGasPrice(
             price: BigInt(
                 try await provider.getReferenceGasPrice()
@@ -1083,8 +1086,7 @@ public class TransactionBlock {
 
                 var gasConfig = blockData.builder.gasConfig
 
-                gasConfig.budget = String(try self.getConfig(key: LimitsKey.maxTxGas, buildOptions: options))
-                gasConfig.payment = []
+                gasConfig.budget = try await self.transferSimulationBudget(provider: provider, options: options)
 
                 let txBlockDataBuilder = try TransactionBlockDataBuilder(
                     builder: SerializedTransactionDataBuilder(gasConfig: gasConfig)
@@ -1127,5 +1129,44 @@ public class TransactionBlock {
         }
 
         self.isPreparred = true
+    }
+
+    /// Reserve only affordable gas during estimation and preserve the selected
+    /// gas source. An empty payment is real address-balance gas, not a fake coin.
+    private func transferSimulationBudget(provider: Provider, options: BuildOptions) async throws -> String {
+        guard let sender = self.blockData.builder.sender else {
+            throw SuiError.customError(message: "Sender is missing")
+        }
+        let gas = self.blockData.builder.gasConfig
+        let owner = gas.owner ?? sender
+        var available: BigInt
+        if let payments = gas.payment, !payments.isEmpty {
+            let coins = try await SuiTransferBuilder.loadCoins { cursor in
+                try await provider.getCoins(owner: owner.hex(), coinType: "0x2::sui::SUI", cursor: cursor, limit: 50)
+            }
+            let ids = Set(try payments.map { try Inputs.normalizeSuiAddress(value: $0.objectId) })
+            available = try coins.reduce(BigInt.zero) { total, coin in
+                guard ids.contains(try Inputs.normalizeSuiAddress(value: coin.coinObjectId)),
+                      let balance = BigInt(coin.balance) else { return total }
+                return total + balance
+            }
+        } else {
+            let balance = try await provider.getBalance(owner: owner.hex(), coinType: "0x2::sui::SUI")
+            guard let value = balance.addressBalance, let addressBalance = BigInt(value) else {
+                throw SuiError.customError(message: "Missing address balance for gas estimation")
+            }
+            available = addressBalance
+            let suiType = try StructTag.fromStr("0x2::sui::SUI").toString()
+            for input in self.blockData.builder.inputs {
+                guard case .callArg(let argument) = input.value,
+                      case .fundsWithdrawal(let withdrawal) = argument.inputType,
+                      let type = withdrawal.coinType.value as? StructTag,
+                      try type.toString() == suiType,
+                      withdrawal.source == .sponsor || owner == sender else { continue }
+                available -= BigInt(withdrawal.amount)
+            }
+        }
+        guard available > 0 else { throw SuiError.customError(message: "Insufficient balance to reserve gas") }
+        return min(available, BigInt(try self.getConfig(key: LimitsKey.maxTxGas, buildOptions: options))).description
     }
 }
